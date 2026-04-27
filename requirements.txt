@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+pymysql
+python-jose
+passlib
+bcrypt
+pydantic
+pandas
+numpy
+scikit-learn
+opencv-python
