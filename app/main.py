@@ -1,7 +1,12 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from fastapi.openapi.utils import get_openapi
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+
 from app.database import engine, Base, SessionLocal
 from app.routes.auth import router as auth_router
 from app.routes.categories import router as categories_router
@@ -9,8 +14,13 @@ from app.routes.products import router as products_router
 from app.routes.stock import router as stock_router
 from app.routes.alerts import router as alerts_router
 from app.routes.dashboard import router as dashboard_router
+from app.routes.forecast import router as forecast_router
 from app.models import Users
 from app.core.security import get_password_hash
+from app.ai.forecasting import load_model, train_model
+
+logger = logging.getLogger(__name__)
+scheduler = BackgroundScheduler()
 
 app = FastAPI()
 security = HTTPBearer()
@@ -63,6 +73,7 @@ app.include_router(products_router, prefix="/products", tags=["products"])
 app.include_router(stock_router, prefix="/stock", tags=["stock"])
 app.include_router(alerts_router, prefix="/alerts", tags=["alerts"])
 app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
+app.include_router(forecast_router, prefix="/forecast", tags=["forecast"])
 
 # Seed admin user on startup
 @app.on_event("startup")
@@ -82,6 +93,28 @@ def startup_event():
             db.commit()
     finally:
         db.close()
+
+    # Load forecast model if it exists, otherwise warn
+    if load_model():
+        logger.info("Forecast model loaded into memory.")
+    else:
+        logger.warning("Model not found. Hit POST /forecast/train to train.")
+
+    # Schedule monthly retraining on the 1st of every month at midnight
+    scheduler.add_job(
+        train_model,
+        trigger=CronTrigger(day=1, hour=0, minute=0),
+        id="monthly_retrain",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("APScheduler started — train_model scheduled for 1st of every month at midnight.")
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    scheduler.shutdown(wait=False)
+    logger.info("APScheduler shut down.")
 
 @app.get("/")
 def root():

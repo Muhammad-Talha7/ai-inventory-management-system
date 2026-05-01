@@ -45,3 +45,8 @@ next-env.d.ts
 
 walmart.csv
 init_db_error.log
+
+
+#fastapi 
+rf_model.pkl
+rf_scaler.pkl
