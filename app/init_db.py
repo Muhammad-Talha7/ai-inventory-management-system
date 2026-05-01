@@ -119,6 +119,7 @@ def seed():
                 continue
             session.add(Products(
                 product_id=row["product_id"],
+                sku=f"SKU-{row['product_id']}",
                 product_name=row["product_name"],
                 category_id=cat_map.get(row["category"]),
                 unit_price=row["unit_price"],

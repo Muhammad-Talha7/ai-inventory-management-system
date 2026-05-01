@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from app.models import Alerts, Users
+from app.models import Alerts, Users, Products, Inventory
 from app.schemas.alert import AlertResponse
 from app.core.dependencies import get_db, get_current_user
 
@@ -14,15 +14,26 @@ def get_alerts(
     db: Session = Depends(get_db),
     current_user: Users = Depends(get_current_user)
 ):
-    query = db.query(Alerts)
+    query = db.query(Alerts, Products, Inventory).outerjoin(
+        Products, Alerts.product_id == Products.product_id
+    ).outerjoin(
+        Inventory, Alerts.product_id == Inventory.product_id
+    )
     
     if status_filter == "active":
         query = query.filter(Alerts.is_resolved == 0)
     elif status_filter == "resolved":
         query = query.filter(Alerts.is_resolved == 1)
         
-    alerts = query.order_by(Alerts.created_at.desc()).all()
-    data = [AlertResponse.model_validate(a).model_dump() for a in alerts]
+    results = query.order_by(Alerts.created_at.desc()).all()
+    
+    data = []
+    for alert, prod, inv in results:
+        alert_dict = AlertResponse.model_validate(alert).model_dump()
+        alert_dict['product_name'] = prod.product_name if prod else "Unknown Product"
+        alert_dict['current_stock'] = inv.current_stock if inv else 0
+        alert_dict['min_stock'] = inv.min_stock if inv else 0
+        data.append(alert_dict)
     
     return {
         "success": True,

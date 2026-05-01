@@ -23,7 +23,15 @@ def create_transaction(
         
     inv = db.query(Inventory).filter(Inventory.product_id == transaction_in.product_id).first()
     if not inv:
-        raise HTTPException(status_code=404, detail="Inventory record not found for product")
+        # Create inventory record if it doesn't exist
+        inv = Inventory(
+            product_id=transaction_in.product_id,
+            current_stock=0,
+            min_stock=10,
+            max_stock=500
+        )
+        db.add(inv)
+        db.flush() # Ensure it has an entry before proceeding
         
     if transaction_in.type == "OUT" and inv.current_stock - transaction_in.quantity < 0:
         raise HTTPException(status_code=400, detail="Insufficient stock for OUT transaction")
@@ -76,18 +84,18 @@ def get_inventory(
     db: Session = Depends(get_db),
     current_user: Users = Depends(get_current_user)
 ):
-    results = db.query(Inventory, Products).join(Products, Inventory.product_id == Products.product_id).all()
+    results = db.query(Products, Inventory).outerjoin(Inventory, Products.product_id == Inventory.product_id).all()
     
     data = []
-    for inv, prod in results:
+    for prod, inv in results:
         data.append({
-            "product_id": inv.product_id,
+            "product_id": prod.product_id,
             "product_name": prod.product_name,
             "sku": prod.sku,
-            "current_stock": inv.current_stock,
-            "min_stock": inv.min_stock,
-            "max_stock": inv.max_stock,
-            "last_updated": inv.last_updated
+            "current_stock": inv.current_stock if inv else 0,
+            "min_stock": inv.min_stock if inv else 10,
+            "max_stock": inv.max_stock if inv else 500,
+            "last_updated": inv.last_updated if inv else None
         })
         
     return {
@@ -102,20 +110,20 @@ def get_product_inventory(
     db: Session = Depends(get_db),
     current_user: Users = Depends(get_current_user)
 ):
-    result = db.query(Inventory, Products).join(Products, Inventory.product_id == Products.product_id).filter(Inventory.product_id == product_id).first()
+    result = db.query(Products, Inventory).outerjoin(Inventory, Products.product_id == Inventory.product_id).filter(Products.product_id == product_id).first()
     
     if not result:
-        raise HTTPException(status_code=404, detail="Inventory record not found")
+        raise HTTPException(status_code=404, detail="Product not found")
         
-    inv, prod = result
+    prod, inv = result
     data = {
-        "product_id": inv.product_id,
+        "product_id": prod.product_id,
         "product_name": prod.product_name,
         "sku": prod.sku,
-        "current_stock": inv.current_stock,
-        "min_stock": inv.min_stock,
-        "max_stock": inv.max_stock,
-        "last_updated": inv.last_updated
+        "current_stock": inv.current_stock if inv else 0,
+        "min_stock": inv.min_stock if inv else 10,
+        "max_stock": inv.max_stock if inv else 500,
+        "last_updated": inv.last_updated if inv else None
     }
     
     return {

@@ -34,19 +34,33 @@ def create_product(
         lead_time_days=0
     )
     db.add(new_prod)
+    
+    # Initialize inventory record for the new product
+    new_inv = Inventory(
+        product_id=new_prod.product_id,
+        current_stock=0,
+        min_stock=10, # Default values
+        max_stock=500
+    )
+    db.add(new_inv)
+    
     db.commit()
     db.refresh(new_prod)
     
     return {
         "success": True,
         "data": ProductResponse.model_validate(new_prod).model_dump(),
-        "message": "Product created successfully"
+        "message": "Product created successfully and inventory record initialized"
     }
 
 @router.get("/", response_model=dict)
 def get_products(
     category_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query("product_name"),
+    sort_order: Optional[str] = Query("asc"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: Users = Depends(get_current_user)
 ):
@@ -62,12 +76,31 @@ def get_products(
             Products.sku.ilike(search_term)
         ))
         
-    products = query.all()
-    data = [ProductResponse.model_validate(p).model_dump() for p in products]
+    # Sorting
+    if hasattr(Products, sort_by):
+        col = getattr(Products, sort_by)
+        if sort_order == "desc":
+            query = query.order_by(col.desc())
+        else:
+            query = query.order_by(col.asc())
+    
+    total_count = query.count()
+    products = query.offset(skip).limit(limit).all()
+    
+    # Efficiently get inventory for all products
+    product_ids = [p.product_id for p in products]
+    inventory_map = {inv.product_id: inv.current_stock for inv in db.query(Inventory).filter(Inventory.product_id.in_(product_ids)).all()}
+    
+    data = []
+    for p in products:
+        p_dict = ProductResponse.model_validate(p).model_dump()
+        p_dict['inventory_quantity'] = inventory_map.get(p.product_id, 0)
+        data.append(p_dict)
     
     return {
         "success": True,
         "data": data,
+        "total_count": total_count,
         "message": "Products retrieved successfully"
     }
 
