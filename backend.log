@@ -1,0 +1,36 @@
+INFO:     Started server process [28818]
+INFO:     Waiting for application startup.
+Model not found. Hit POST /forecast/train to train.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:57825 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57849 - "OPTIONS /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57849 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57900 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:57831 - "POST /forecast/train HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58098 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58104 - "GET /forecast/P0001?weeks=4 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58299 - "POST /auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58299 - "OPTIONS /auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58299 - "GET /auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58299 - "OPTIONS /alerts/?status=active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58313 - "OPTIONS /dashboard/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58315 - "OPTIONS /alerts/?status=active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58316 - "OPTIONS /dashboard/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58316 - "GET /alerts/?status=active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58313 - "GET /alerts/?status=active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58315 - "GET /dashboard/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58313 - "GET /dashboard/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58770 - "OPTIONS /products/?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58770 - "GET /products/?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58770 - "OPTIONS /forecast/P0176?weeks=8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58770 - "GET /forecast/P0176?weeks=8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58842 - "OPTIONS /forecast/P0175?weeks=8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58840 - "GET /forecast/P0176?weeks=8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58842 - "GET /forecast/P0175?weeks=8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58909 - "GET /auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58905 - "GET /alerts/?status=active HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58908 - "GET /products/?limit=100 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58908 - "GET /forecast/P0176?weeks=8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58908 - "OPTIONS /forecast/P0035?weeks=8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58908 - "GET /forecast/P0035?weeks=8 HTTP/1.1" 200 OK

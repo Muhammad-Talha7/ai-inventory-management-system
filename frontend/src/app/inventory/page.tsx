@@ -712,7 +712,10 @@ export default function InventoryPage() {
                   <Edit2 size={16} />
                   Edit Product
                 </button>
-                <button className="flex-1 flex items-center justify-center gap-2 py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors">
+                <button 
+                  onClick={() => router.push(`/forecasts?product_id=${selectedProduct.product_id}`)}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors"
+                >
                   <TrendingUp size={16} />
                   View Forecasts
                 </button>
