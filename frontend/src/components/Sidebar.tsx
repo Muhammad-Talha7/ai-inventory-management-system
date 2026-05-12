@@ -13,7 +13,8 @@ import {
   LogOut,
   Truck,
   LayoutGrid,
-  Users as UsersIcon
+  Users as UsersIcon,
+  Camera
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -24,6 +25,7 @@ const navItems = [
   { icon: LayoutGrid, label: 'Categories', href: '/categories' },
   { icon: UsersIcon, label: 'User Management', href: '/users', adminOnly: true },
   { icon: TrendingUp, label: 'AI Forecasts', href: '/forecasts' },
+  { icon: Camera, label: 'CV Scanner', href: '/scanner' },
   { icon: AlertTriangle, label: 'Alerts', href: '/alerts' },
 ];
 
