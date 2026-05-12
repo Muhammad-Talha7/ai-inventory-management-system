@@ -7,6 +7,7 @@ from datetime import timedelta
 
 import pandas as pd
 import numpy as np
+import math
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import LabelEncoder
 
@@ -125,6 +126,67 @@ def load_model():
     return True
 
 
+def bulk_forecast_demand(weeks: int = 4):
+    """
+    Fast bulk prediction for all products without saving to the DB.
+    Returns a dict mapping product_id to total predicted demand over the next N weeks.
+    """
+    global _cached_model, _cached_encoders
+
+    if _cached_model is None or _cached_encoders is None:
+        if not load_model():
+            raise FileNotFoundError("No trained model found.")
+
+    db = SessionLocal()
+    try:
+        from sqlalchemy import func
+        subq = db.query(func.max(SalesHistory.id)).group_by(SalesHistory.product_id).subquery()
+        latest_sales = db.query(SalesHistory).filter(SalesHistory.id.in_(subq)).all()
+
+        if not latest_sales:
+            return {}
+
+        le_weather = _cached_encoders["le_weather"]
+        le_season = _cached_encoders["le_season"]
+        today = pd.Timestamp.now().normalize()
+
+        row_data = []
+        product_list = []
+
+        for latest in latest_sales:
+            base_date = pd.Timestamp(latest.date)
+            gap_days = (today - base_date).days
+            first_w = max(1, math.ceil(gap_days / 7))
+
+            for w in range(first_w, first_w + weeks):
+                future_date = base_date + timedelta(weeks=w)
+                row_data.append({
+                    "unit_price": float(latest.unit_price),
+                    "discount": float(latest.discount),
+                    "is_holiday_promotion": int(latest.is_holiday_promotion),
+                    "competitor_pricing": float(latest.competitor_pricing),
+                    "weather_condition": latest.weather_condition,
+                    "seasonality": latest.seasonality,
+                    "date": future_date,
+                })
+                product_list.append(latest.product_id)
+
+        if not row_data:
+            return {}
+
+        df = pd.DataFrame(row_data)
+        X_pred = _build_features(df, le_weather, le_season, fit=False)
+        predictions = _cached_model.predict(X_pred)
+
+        demand_by_product = {}
+        for pid, pred in zip(product_list, predictions):
+            demand_by_product[pid] = demand_by_product.get(pid, 0) + pred
+
+        return demand_by_product
+    finally:
+        db.close()
+
+
 def forecast_product(product_id: str, weeks: int = 4):
     """
     Predict demand for the next N weeks for a given product.
@@ -157,11 +219,16 @@ def forecast_product(product_id: str, weeks: int = 4):
 
         predictions = []
         base_date = pd.Timestamp(latest.date)
-
-        for w in range(1, weeks + 1):
+        today = pd.Timestamp.now().normalize()
+        
+        # Calculate exactly which weeks to forecast to start from today
+        gap_days = (today - base_date).days
+        first_w = max(1, math.ceil(gap_days / 7))
+        
+        row_data = []
+        for w in range(first_w, first_w + weeks):
             future_date = base_date + timedelta(weeks=w)
-
-            row_df = pd.DataFrame([{
+            row_data.append({
                 "unit_price": float(latest.unit_price),
                 "discount": float(latest.discount),
                 "is_holiday_promotion": int(latest.is_holiday_promotion),
@@ -169,13 +236,22 @@ def forecast_product(product_id: str, weeks: int = 4):
                 "weather_condition": latest.weather_condition,
                 "seasonality": latest.seasonality,
                 "date": future_date,
-            }])
+                "w": w
+            })
 
-            X_pred = _build_features(row_df, le_weather, le_season, fit=False)
-            predicted = float(_cached_model.predict(X_pred)[0])
+        if not row_data:
+            return []
+
+        df = pd.DataFrame(row_data)
+        X_pred = _build_features(df, le_weather, le_season, fit=False)
+        predictions_array = _cached_model.predict(X_pred)
+
+        for i, row in enumerate(row_data):
+            future_date = row["date"]
+            predicted = float(predictions_array[i])
 
             predictions.append({
-                "week": w,
+                "week": len(predictions) + 1,
                 "date": future_date.strftime("%Y-%m-%d"),
                 "predicted_demand": round(predicted, 2),
             })
