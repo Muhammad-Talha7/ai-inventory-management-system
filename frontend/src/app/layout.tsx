@@ -21,11 +21,8 @@ export default function RootLayout({
   const isLoginPage = pathname === '/login';
 
   return (
-    <html lang="en" className={`${inter.variable}`} style={{ colorScheme: 'light' }}>
-      <body
-        className="bg-white text-slate-900"
-        style={{ fontFamily: 'var(--font-inter), -apple-system, sans-serif' }}
-      >
+    <html lang="en" style={{ colorScheme: 'light' }}>
+      <body className={`bg-white text-slate-900 ${inter.className}`}>
         <AuthProvider>
           {isLoginPage ? (
             <main className="h-screen w-full overflow-hidden bg-slate-50">

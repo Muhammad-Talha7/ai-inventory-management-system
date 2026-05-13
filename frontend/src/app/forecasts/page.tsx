@@ -13,7 +13,8 @@ import {
   AlertCircle,
   Calendar,
   Package,
-  Info
+  Info,
+  ShoppingCart
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
@@ -46,7 +47,7 @@ export default function ForecastsPage() {
   const fetchProducts = async () => {
     try {
       setLoadingProducts(true);
-      const res = await apiFetch('/products/?limit=100');
+      const res = await apiFetch('/products/?limit=1000');
       if (res.success) {
         setProducts(res.data);
         // If we have a product_id from query params, fetch its forecast
@@ -171,6 +172,30 @@ export default function ForecastsPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Reorder Suggestions Banner */}
+      <div
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gradient-to-r from-indigo-600 to-violet-600 rounded-3xl px-8 py-5 shadow-xl shadow-indigo-100"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+            <ShoppingCart size={20} className="text-white" />
+          </div>
+          <div>
+            <p className="text-white font-black text-sm">AI Reorder Suggestions Ready</p>
+            <p className="text-indigo-200 text-xs font-medium mt-0.5">
+              See which products need restocking based on your 30-day demand forecast.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => router.push('/reorder')}
+          className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-white text-indigo-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-md"
+        >
+          View Suggestions
+          <ArrowRight size={14} />
+        </button>
       </div>
 
       {error ? (

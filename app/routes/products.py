@@ -60,7 +60,7 @@ def get_products(
     sort_by: Optional[str] = Query("product_name"),
     sort_order: Optional[str] = Query("asc"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user: Users = Depends(get_current_user)
 ):
