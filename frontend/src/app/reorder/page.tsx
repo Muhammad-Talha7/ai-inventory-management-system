@@ -58,6 +58,7 @@ export default function ReorderSuggestionsPage() {
   };
 
   const getUrgency = (s: ReorderSuggestion): 'critical' | 'moderate' | 'low' => {
+    if (s.projected_demand === 0) return 'critical';
     const ratio = s.suggested_reorder_quantity / s.projected_demand;
     if (ratio >= 0.7) return 'critical';
     if (ratio >= 0.35) return 'moderate';
@@ -286,7 +287,8 @@ export default function ReorderSuggestionsPage() {
                   sorted.map((s, idx) => {
                     const urgency = getUrgency(s);
                     const cfg = urgencyConfig[urgency];
-                    const stockPct = Math.min(100, Math.round((s.current_stock / s.projected_demand) * 100));
+                    const targetStock = Math.max(s.projected_demand, s.current_stock + s.suggested_reorder_quantity);
+                    const stockPct = targetStock > 0 ? Math.min(100, Math.round((s.current_stock / targetStock) * 100)) : 0;
 
                     return (
                       <tr

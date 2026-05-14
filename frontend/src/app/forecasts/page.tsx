@@ -36,6 +36,7 @@ export default function ForecastsPage() {
   const [forecastData, setForecastData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [training, setTraining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -78,6 +79,25 @@ export default function ForecastsPage() {
       setError(err.message || 'Failed to fetch forecast. Make sure the model is trained.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const trainModel = async () => {
+    try {
+      setTraining(true);
+      setError(null);
+      const res = await apiFetch('/forecast/train', { method: 'POST' });
+      if (res.success) {
+        if (selectedProductId) {
+          fetchForecast(selectedProductId);
+        }
+      } else {
+        setError(res.message || 'Failed to train model.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to train model. You might need admin privileges.');
+    } finally {
+      setTraining(false);
     }
   };
 
@@ -208,10 +228,21 @@ export default function ForecastsPage() {
             <p className="text-slate-500 mt-1 max-w-md">{error}</p>
           </div>
           <button 
-            onClick={() => fetchForecast(selectedProductId)}
-            className="px-6 py-2 bg-red-500 text-white rounded-xl font-bold text-sm hover:bg-red-600 transition-colors"
+            onClick={trainModel}
+            disabled={training}
+            className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-indigo-100"
           >
-            Retry Connection
+            {training ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Training AI Model...
+              </>
+            ) : (
+              <>
+                <Brain size={16} />
+                Train Model Now
+              </>
+            )}
           </button>
         </div>
       ) : (

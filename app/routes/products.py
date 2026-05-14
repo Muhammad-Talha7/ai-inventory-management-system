@@ -34,6 +34,8 @@ def create_product(
         lead_time_days=0
     )
     db.add(new_prod)
+    db.flush()
+
     
     # Initialize inventory record for the new product
     new_inv = Inventory(

@@ -154,12 +154,8 @@ def bulk_forecast_demand(weeks: int = 4):
         product_list = []
 
         for latest in latest_sales:
-            base_date = pd.Timestamp(latest.date)
-            gap_days = (today - base_date).days
-            first_w = max(1, math.ceil(gap_days / 7))
-
-            for w in range(first_w, first_w + weeks):
-                future_date = base_date + timedelta(weeks=w)
+            for w in range(1, weeks + 1):
+                future_date = today + timedelta(weeks=w)
                 row_data.append({
                     "unit_price": float(latest.unit_price),
                     "discount": float(latest.discount),
@@ -212,22 +208,26 @@ def forecast_product(product_id: str, weeks: int = 4):
             .first()
         )
         if not latest:
-            raise ValueError(f"No sales history found for product {product_id}")
+            # If a product has no sales history, return 0 demand
+            predictions = []
+            today = pd.Timestamp.now().normalize()
+            for w in range(1, weeks + 1):
+                future_date = today + timedelta(weeks=w)
+                predictions.append({
+                    "week": w,
+                    "date": future_date.strftime("%Y-%m-%d"),
+                    "predicted_demand": 0.0,
+                })
+            return predictions
 
         le_weather = _cached_encoders["le_weather"]
         le_season = _cached_encoders["le_season"]
 
         predictions = []
-        base_date = pd.Timestamp(latest.date)
         today = pd.Timestamp.now().normalize()
-        
-        # Calculate exactly which weeks to forecast to start from today
-        gap_days = (today - base_date).days
-        first_w = max(1, math.ceil(gap_days / 7))
-        
         row_data = []
-        for w in range(first_w, first_w + weeks):
-            future_date = base_date + timedelta(weeks=w)
+        for w in range(1, weeks + 1):
+            future_date = today + timedelta(weeks=w)
             row_data.append({
                 "unit_price": float(latest.unit_price),
                 "discount": float(latest.discount),

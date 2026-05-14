@@ -34,24 +34,26 @@ def get_reorder_suggestions(
         # Get bulk predictions for all products for next 4 weeks
         demand_by_product = bulk_forecast_demand(weeks=4)
 
-        # Query all products and their current inventory
+        # Query all products and their current inventory along with min_stock
         items = (
-            db.query(Products.product_id, Products.product_name, Inventory.current_stock)
+            db.query(Products.product_id, Products.product_name, Inventory.current_stock, Inventory.min_stock)
             .join(Inventory, Products.product_id == Inventory.product_id)
             .all()
         )
         
         suggestions = []
         for item in items:
-            product_id, product_name, current_stock = item
+            product_id, product_name, current_stock, min_stock = item
             
             # Use projected demand from bulk forecast
             projected_demand = demand_by_product.get(product_id, 0)
-            if projected_demand == 0:
-                continue
-                
-            shortfall = projected_demand - current_stock
-            if shortfall >= 0:
+            
+            # Target stock should be at least min_stock or projected demand, whichever is higher
+            safe_min_stock = min_stock if min_stock is not None else 0
+            target_stock = max(projected_demand, safe_min_stock)
+            
+            shortfall = target_stock - current_stock
+            if shortfall > 0:
                 suggestions.append({
                     "product_id": product_id,
                     "product_name": product_name,
