@@ -139,8 +139,8 @@ def bulk_forecast_demand(weeks: int = 4):
 
     db = SessionLocal()
     try:
-        from sqlalchemy import func
-        subq = db.query(func.max(SalesHistory.id)).group_by(SalesHistory.product_id).subquery()
+        from sqlalchemy import func, select
+        subq = select(func.max(SalesHistory.id)).group_by(SalesHistory.product_id).scalar_subquery()
         latest_sales = db.query(SalesHistory).filter(SalesHistory.id.in_(subq)).all()
 
         if not latest_sales:

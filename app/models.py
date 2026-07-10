@@ -103,3 +103,13 @@ class Alerts(Base):
     message = Column(Text)
     is_resolved = Column(Integer, default=0)
     created_at = Column(DateTime, default=func.now())
+
+
+class PurchaseOrders(Base):
+    __tablename__ = "purchase_orders"
+
+    order_id = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(String(10), ForeignKey("products.product_id"))
+    order_quantity = Column(Integer)
+    status = Column(String(50), default="Scheduled")
+    created_at = Column(DateTime, default=func.now())

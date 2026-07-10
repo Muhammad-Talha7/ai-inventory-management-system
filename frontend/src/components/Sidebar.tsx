@@ -15,7 +15,8 @@ import {
   LayoutGrid,
   Users as UsersIcon,
   Camera,
-  ShoppingCart
+  ShoppingCart,
+  ClipboardList
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -27,6 +28,7 @@ const navItems = [
   { icon: UsersIcon, label: 'User Management', href: '/users', adminOnly: true },
   { icon: TrendingUp, label: 'AI Forecasts', href: '/forecasts' },
   { icon: ShoppingCart, label: 'Reorder Suggestions', href: '/reorder' },
+  { icon: ClipboardList, label: 'Purchase Orders', href: '/purchase-orders' },
   { icon: Camera, label: 'CV Scanner', href: '/scanner' },
   { icon: AlertTriangle, label: 'Alerts', href: '/alerts' },
 ];

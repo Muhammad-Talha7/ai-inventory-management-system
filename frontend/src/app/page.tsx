@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import AutoOrderButton from '@/components/AutoOrderButton';
 import {
   AreaChart,
   Area,
@@ -199,15 +200,16 @@ export default function Home() {
     <div style={{ maxWidth: 1280, margin: '0 auto' }}>
 
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-7">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-7">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             Welcome back, {user?.name || 'User'}. Here's what's happening today.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100">
+        <div className="flex flex-col sm:flex-row items-end sm:items-start gap-4">
+          <AutoOrderButton />
+          <span className="flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 mt-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             System Live
           </span>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { 
   Sparkles, 
   TrendingUp, 
@@ -28,7 +28,7 @@ import {
   Area
 } from 'recharts';
 
-export default function ForecastsPage() {
+function ForecastsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<any[]>([]);
@@ -438,5 +438,13 @@ export default function ForecastsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ForecastsPage() {
+  return (
+    <Suspense fallback={<div className="h-[80vh] flex items-center justify-center"><div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>}>
+      <ForecastsPageContent />
+    </Suspense>
   );
 }
