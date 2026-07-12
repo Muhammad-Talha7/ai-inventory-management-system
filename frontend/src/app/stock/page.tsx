@@ -20,8 +20,10 @@ import {
   Package
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 
 export default function StockPage() {
+  const { user } = useAuth();
   const [stockData, setStockData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -261,18 +263,22 @@ export default function StockPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => { setSelectedProduct(item); setTxType('IN'); setIsTxModalOpen(true); }}
-                            className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Stock IN"
-                          >
-                            <Plus size={18} />
-                          </button>
-                          <button 
-                            onClick={() => { setSelectedProduct(item); setTxType('OUT'); setIsTxModalOpen(true); }}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Stock OUT"
-                          >
-                            <Minus size={18} />
-                          </button>
+                          {user?.role === 'staff' && (
+                            <>
+                              <button 
+                                onClick={() => { setSelectedProduct(item); setTxType('IN'); setIsTxModalOpen(true); }}
+                                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="Stock IN"
+                              >
+                                <Plus size={18} />
+                              </button>
+                              <button 
+                                onClick={() => { setSelectedProduct(item); setTxType('OUT'); setIsTxModalOpen(true); }}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Stock OUT"
+                              >
+                                <Minus size={18} />
+                              </button>
+                            </>
+                          )}
                           <button 
                             onClick={() => fetchHistory(item)}
                             className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors" title="History"

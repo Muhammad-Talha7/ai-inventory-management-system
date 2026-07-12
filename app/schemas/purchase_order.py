@@ -15,6 +15,9 @@ class PurchaseOrderResponse(PurchaseOrderBase):
     created_at: Optional[datetime] = None
     product_name: Optional[str] = None
     sku: Optional[str] = None
+    approved_by: Optional[int] = None
+    approved_at: Optional[datetime] = None
+    rejected_by: Optional[int] = None
 
     class Config:
         orm_mode = True

@@ -18,8 +18,12 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 
+import { useAuth } from '@/context/AuthContext';
+
 export default function CategoriesPage() {
+  const { user } = useAuth();
   const router = useRouter();
+  const canEdit = user?.role === 'manager';
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,13 +124,15 @@ export default function CategoriesPage() {
             Organize your product catalog with custom categories.
           </p>
         </div>
-        <button 
-          onClick={() => handleOpenModal()}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200"
-        >
-          <Plus size={18} />
-          New Category
-        </button>
+        {canEdit && (
+          <button 
+            onClick={() => handleOpenModal()}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200"
+          >
+            <Plus size={18} />
+            New Category
+          </button>
+        )}
       </div>
 
       {/* Toolbar */}
@@ -163,20 +169,22 @@ export default function CategoriesPage() {
                 <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                   <LayoutGrid size={24} />
                 </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button 
-                    onClick={() => handleOpenModal(cat)}
-                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                  >
-                    <Edit2 size={16} />
-                  </button>
-                  <button 
-                    onClick={() => handleOpenDeleteModal(cat)}
-                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+                {canEdit && (
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => handleOpenModal(cat)}
+                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      onClick={() => handleOpenDeleteModal(cat)}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                )}
               </div>
               <h3 className="text-lg font-bold text-slate-900 mb-1">{cat.name}</h3>
               <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-50">

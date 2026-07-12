@@ -4,7 +4,7 @@ from typing import List
 
 from app.models import Categories, Products, Users
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
-from app.core.dependencies import get_db, get_current_user, require_manager_or_above
+from app.core.dependencies import get_db, require_role
 
 router = APIRouter()
 
@@ -12,7 +12,7 @@ router = APIRouter()
 def create_category(
     category_in: CategoryCreate, 
     db: Session = Depends(get_db), 
-    current_user: Users = Depends(require_manager_or_above)
+    current_user: Users = Depends(require_role("manager"))
 ):
     existing = db.query(Categories).filter(Categories.name == category_in.name).first()
     if existing:
@@ -32,7 +32,7 @@ def create_category(
 @router.get("/", response_model=dict)
 def get_categories(
     db: Session = Depends(get_db),
-    current_user: Users = Depends(get_current_user)
+    current_user: Users = Depends(require_role("staff", "manager", "admin"))
 ):
     cats = db.query(Categories).all()
     data = [CategoryResponse.model_validate(c).model_dump() for c in cats]
@@ -46,7 +46,7 @@ def get_categories(
 def get_category(
     category_id: int,
     db: Session = Depends(get_db),
-    current_user: Users = Depends(get_current_user)
+    current_user: Users = Depends(require_role("staff", "manager", "admin"))
 ):
     cat = db.query(Categories).filter(Categories.category_id == category_id).first()
     if not cat:
@@ -62,7 +62,7 @@ def update_category(
     category_id: int,
     category_in: CategoryUpdate,
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_manager_or_above)
+    current_user: Users = Depends(require_role("manager"))
 ):
     cat = db.query(Categories).filter(Categories.category_id == category_id).first()
     if not cat:
@@ -86,7 +86,7 @@ def update_category(
 def delete_category(
     category_id: int,
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_manager_or_above)
+    current_user: Users = Depends(require_role("manager"))
 ):
     cat = db.query(Categories).filter(Categories.category_id == category_id).first()
     if not cat:

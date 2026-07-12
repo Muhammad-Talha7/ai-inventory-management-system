@@ -4,14 +4,14 @@ from sqlalchemy import func
 
 from app.models import Products, Inventory, StockTransactions, Alerts, Categories, Users
 from app.schemas.dashboard import DashboardResponse
-from app.core.dependencies import get_db, get_current_user
+from app.core.dependencies import get_db, require_role
 
 router = APIRouter()
 
 @router.get("/", response_model=dict)
 def get_dashboard(
     db: Session = Depends(get_db),
-    current_user: Users = Depends(get_current_user)
+    current_user: Users = Depends(require_role("staff", "manager", "admin"))
 ):
     total_products = db.query(func.count(Products.product_id)).scalar() or 0
     total_categories = db.query(func.count(Categories.category_id)).scalar() or 0
@@ -23,6 +23,7 @@ def get_dashboard(
     out_of_stock_count = db.query(func.count(Inventory.product_id)).filter(Inventory.current_stock == 0).scalar() or 0
     
     active_alerts = db.query(func.count(Alerts.id)).filter(Alerts.is_resolved == 0).scalar() or 0
+    pending_stock_requests = db.query(func.count(StockTransactions.transaction_id)).filter(StockTransactions.status == "pending").scalar() or 0
     
     recent_txs_raw = db.query(StockTransactions, Products).join(Products, StockTransactions.product_id == Products.product_id).order_by(StockTransactions.timestamp.desc()).limit(10).all()
     recent_transactions = [
@@ -56,6 +57,7 @@ def get_dashboard(
         "out_of_stock_count": out_of_stock_count,
         "active_alerts": active_alerts,
         "total_categories": total_categories,
+        "pending_stock_requests": pending_stock_requests,
         "recent_transactions": recent_transactions,
         "low_stock_items": low_stock_items
     }

@@ -34,18 +34,22 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         
     return user
 
-def require_admin(current_user: Users = Depends(get_current_user)):
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
-    return current_user
+def require_role(*allowed_roles: str):
+    """
+    Factory that returns a FastAPI dependency enforcing role membership.
 
-def require_manager_or_above(current_user: Users = Depends(get_current_user)):
-    if current_user.role not in ["admin", "manager"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
-    return current_user
+    Usage:
+        current_user: Users = Depends(require_role("manager", "admin"))
+    """
+    def _check(current_user: Users = Depends(get_current_user)):
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "success": False,
+                    "data": None,
+                    "message": "Insufficient permissions",
+                },
+            )
+        return current_user
+    return _check

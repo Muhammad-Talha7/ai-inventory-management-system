@@ -16,21 +16,23 @@ import {
   Users as UsersIcon,
   Camera,
   ShoppingCart,
-  ClipboardList
+  ClipboardList,
+  ClipboardCheck
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
-  { icon: Package, label: 'Inventory', href: '/inventory' },
-  { icon: Truck, label: 'Stock Management', href: '/stock' },
-  { icon: LayoutGrid, label: 'Categories', href: '/categories' },
-  { icon: UsersIcon, label: 'User Management', href: '/users', adminOnly: true },
-  { icon: TrendingUp, label: 'AI Forecasts', href: '/forecasts' },
-  { icon: ShoppingCart, label: 'Reorder Suggestions', href: '/reorder' },
-  { icon: ClipboardList, label: 'Purchase Orders', href: '/purchase-orders' },
-  { icon: Camera, label: 'CV Scanner', href: '/scanner' },
-  { icon: AlertTriangle, label: 'Alerts', href: '/alerts' },
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/', roles: ['admin', 'manager', 'staff'] },
+  { icon: Package, label: 'Inventory', href: '/inventory', roles: ['admin', 'manager', 'staff'] },
+  { icon: Truck, label: 'Stock Management', href: '/stock', roles: ['admin', 'manager', 'staff'] },
+  { icon: ClipboardCheck, label: 'Stock Requests', href: '/stock-requests', roles: ['admin', 'manager', 'staff'] },
+  { icon: LayoutGrid, label: 'Categories', href: '/categories', roles: ['admin', 'manager'] },
+  { icon: UsersIcon, label: 'User Management', href: '/users', roles: ['admin'] },
+  { icon: TrendingUp, label: 'AI Forecasts', href: '/forecasts', roles: ['admin', 'manager'] },
+  { icon: ShoppingCart, label: 'Reorder Suggestions', href: '/reorder', roles: ['admin', 'manager'] },
+  { icon: ClipboardList, label: 'Purchase Orders', href: '/purchase-orders', roles: ['admin', 'manager', 'staff'] },
+  { icon: Camera, label: 'CV Scanner', href: '/scanner', roles: ['staff'] },
+  { icon: AlertTriangle, label: 'Alerts', href: '/alerts', roles: ['admin', 'manager', 'staff'] },
 ];
 
 export default function Sidebar() {
@@ -61,7 +63,7 @@ export default function Sidebar() {
           Main Menu
         </p>
         <nav className="space-y-0.5">
-          {navItems.filter(item => !item.adminOnly || user?.role === 'admin').map((item) => {
+          {navItems.filter(item => item.roles.includes(user?.role || '')).map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link

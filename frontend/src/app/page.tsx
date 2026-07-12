@@ -196,13 +196,131 @@ export default function Home() {
     },
   ];
 
+  if (user?.role === 'staff') {
+    return (
+      <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-7">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Staff Dashboard</h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Welcome back, {user?.name}. Here are your operational updates.
+            </p>
+          </div>
+        </div>
+
+        {/* Staff Quick Actions & Basic KPIs */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-7">
+          <StatCard
+            label="Total Products"
+            value={dashboardData?.total_products || 0}
+            sub="Items in catalog"
+            icon={Package}
+            iconBg="#eff6ff"
+            iconColor="#3b82f6"
+          />
+          <StatCard
+            label="Recent Movements"
+            value={dashboardData?.recent_transactions?.length || 0}
+            sub="Latest activity"
+            icon={TrendingUp}
+            iconBg="#f5f3ff"
+            iconColor="#8b5cf6"
+          />
+          <div className="bg-indigo-600 rounded-xl p-6 flex flex-col justify-between text-white shadow-lg shadow-indigo-100">
+            <div>
+              <p className="text-sm font-bold text-indigo-200">Quick Actions</p>
+              <h3 className="text-xl font-bold mt-1">Need to update stock?</h3>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => router.push('/stock')}
+                className="flex-1 bg-white text-indigo-600 text-sm font-bold py-2 rounded-lg hover:bg-indigo-50 transition-colors"
+              >
+                Stock Request
+              </button>
+              <button
+                onClick={() => router.push('/inventory')}
+                className="flex-1 bg-indigo-500 text-white text-sm font-bold py-2 rounded-lg hover:bg-indigo-400 transition-colors border border-indigo-400"
+              >
+                View Catalog
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Staff Recent Transactions */}
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+          <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+            <div>
+              <h2 className="text-base font-bold text-slate-800">Recent Movements</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Latest inbound and outbound activity</p>
+            </div>
+            <button
+              onClick={() => router.push('/stock')}
+              className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+            >
+              View Stock
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50/50">
+                  <th className="px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Product</th>
+                  <th className="px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Qty</th>
+                  <th className="px-6 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {(dashboardData?.recent_transactions || []).map((tx: any) => (
+                  <tr key={tx.transaction_id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <p className="text-sm font-bold text-slate-800 truncate max-w-[200px]">{tx.product_name}</p>
+                      <p className="text-[10px] font-mono text-slate-400 mt-0.5">{tx.sku}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                        tx.type === 'IN' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                      }`}>
+                        {tx.type}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`text-sm font-bold ${tx.type === 'IN' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {tx.type === 'IN' ? '+' : '-'}{tx.quantity}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-xs text-slate-500 font-medium">
+                        {new Date(tx.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {(!dashboardData?.recent_transactions || dashboardData.recent_transactions.length === 0) && (
+              <div className="py-20 text-center">
+                <Clock className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                <p className="text-slate-400 text-sm">No recent transactions recorded.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // MANAGER & ADMIN DASHBOARD
   return (
     <div style={{ maxWidth: 1280, margin: '0 auto' }}>
 
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-7">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard Overview</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Operations Dashboard</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             Welcome back, {user?.name || 'User'}. Here's what's happening today.
           </p>
@@ -505,6 +623,10 @@ export default function Home() {
             <p className="text-xs font-bold uppercase tracking-widest text-indigo-100 mb-4">Operations Summary</p>
             <div className="space-y-4">
               <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-indigo-100">Pending Stock Requests</span>
+                <span className="text-lg font-bold">{dashboardData?.pending_stock_requests || 0}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-indigo-500 pt-4">
                 <span className="text-sm font-medium text-indigo-100">Active Alerts</span>
                 <span className="text-lg font-bold">{dashboardData?.active_alerts || 0}</span>
               </div>

@@ -25,10 +25,13 @@ import {
   Loader2
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 
 function InventoryPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
+  const canEdit = user?.role === 'manager';
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -244,13 +247,15 @@ function InventoryPageContent() {
             <Download size={18} />
             Export
           </button>
-          <button 
-            onClick={() => { resetForm(); setIsAddModalOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200"
-          >
-            <Plus size={18} />
-            Add Product
-          </button>
+          {canEdit && (
+            <button 
+              onClick={() => { resetForm(); setIsAddModalOpen(true); }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200"
+            >
+              <Plus size={18} />
+              Add Product
+            </button>
+          )}
         </div>
       </div>
 
@@ -441,18 +446,22 @@ function InventoryPageContent() {
                         >
                           <Eye size={18} />
                         </button>
-                        <button 
-                          onClick={() => openEditModal(product)}
-                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                        <button 
-                          onClick={() => openDeleteModal(product)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {canEdit && (
+                          <>
+                            <button 
+                              onClick={() => openEditModal(product)}
+                              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                            <button 
+                              onClick={() => openDeleteModal(product)}
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -705,13 +714,15 @@ function InventoryPageContent() {
               </div>
 
               <div className="flex gap-3 pt-4 border-t border-slate-100">
-                <button 
-                  onClick={() => { setIsDetailsModalOpen(false); openEditModal(selectedProduct); }}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
-                >
-                  <Edit2 size={16} />
-                  Edit Product
-                </button>
+                {canEdit && (
+                  <button 
+                    onClick={() => { setIsDetailsModalOpen(false); openEditModal(selectedProduct); }}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+                  >
+                    <Edit2 size={16} />
+                    Edit Product
+                  </button>
+                )}
                 <button 
                   onClick={() => router.push(`/forecasts?product_id=${selectedProduct.product_id}`)}
                   className="flex-1 flex items-center justify-center gap-2 py-3 bg-white text-slate-600 border border-slate-200 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors"

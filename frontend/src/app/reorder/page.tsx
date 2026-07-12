@@ -38,6 +38,8 @@ export default function ReorderSuggestionsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [filter, setFilter] = useState<'all' | 'critical' | 'moderate' | 'low'>('all');
 
+  const [generating, setGenerating] = useState(false);
+
   useEffect(() => {
     fetchSuggestions();
   }, []);
@@ -54,6 +56,20 @@ export default function ReorderSuggestionsPage() {
       setError(err.message || 'Failed to fetch reorder suggestions. Ensure the model is trained.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateOrders = async () => {
+    try {
+      setGenerating(true);
+      const res = await apiFetch('/api/forecast/run-weekly', { method: 'POST' });
+      alert(`Success! ${res.orders_scheduled} purchase orders were generated for the deficits.`);
+      // Optionally redirect to purchase orders page
+      router.push('/purchase-orders');
+    } catch (err: any) {
+      alert(err.message || 'Failed to generate purchase orders');
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -138,14 +154,24 @@ export default function ReorderSuggestionsPage() {
             Products where <span className="text-indigo-600 font-bold">forecasted demand (30-day)</span> exceeds current stock. Sorted by most critical shortfall first.
           </p>
         </div>
-        <button
-          onClick={fetchSuggestions}
-          disabled={loading}
-          className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-60"
-        >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          Refresh Analysis
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={fetchSuggestions}
+            disabled={loading || generating}
+            className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm disabled:opacity-60"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+          <button
+            onClick={handleGenerateOrders}
+            disabled={loading || generating || suggestions.length === 0}
+            className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-60"
+          >
+            {generating ? <RefreshCw size={16} className="animate-spin" /> : <ShoppingCart size={16} />}
+            Generate Purchase Orders
+          </button>
+        </div>
       </div>
 
       {/* Summary KPI Cards */}

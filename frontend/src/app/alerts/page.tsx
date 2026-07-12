@@ -95,7 +95,7 @@ export default function AlertsPage() {
             )}
           </div>
           <p className="text-sm text-slate-500 mt-1">
-            Monitor and resolve inventory issues and system notifications.
+            Monitor and mark done inventory issues and system notifications.
           </p>
         </div>
         <button 
@@ -133,7 +133,7 @@ export default function AlertsPage() {
               statusFilter === 'resolved' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
           >
-            Resolved
+            Marked done
           </button>
           <button 
             onClick={() => setStatusFilter('all')}
@@ -181,9 +181,11 @@ export default function AlertsPage() {
                 <div className={`p-3 rounded-xl shrink-0 ${
                   alert.is_resolved 
                     ? 'bg-slate-100 text-slate-400' 
-                    : alert.alert_type === 'LOW' 
-                      ? 'bg-amber-50 text-amber-500' 
-                      : 'bg-indigo-50 text-indigo-500'
+                    : alert.alert_type === 'LOW_STOCK' || alert.alert_type === 'PO_OVERDUE' || alert.alert_type === 'STOCK_REQ_REJECTED'
+                      ? 'bg-rose-50 text-rose-500' 
+                      : alert.alert_type === 'STOCK_REQ_APPROVED' || alert.alert_type === 'PO_APPROVED'
+                        ? 'bg-emerald-50 text-emerald-500'
+                        : 'bg-indigo-50 text-indigo-500'
                 }`}>
                   {alert.is_resolved ? <CheckCircle2 size={24} /> : <AlertTriangle size={24} />}
                 </div>
@@ -206,16 +208,18 @@ export default function AlertsPage() {
                     {alert.message}
                   </h3>
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1.5 text-xs font-medium">
-                      <Package size={14} className="text-slate-400" />
-                      <span className="text-slate-500">Product: </span>
-                      <span className="text-slate-900 font-bold">{alert.product_name}</span>
-                      <span className="text-slate-400 font-mono">({alert.product_id})</span>
-                    </div>
+                    {alert.product_id && alert.product_name && (
+                      <div className="flex items-center gap-1.5 text-xs font-medium">
+                        <Package size={14} className="text-slate-400" />
+                        <span className="text-slate-500">Product: </span>
+                        <span className="text-slate-900 font-bold">{alert.product_name}</span>
+                        <span className="text-slate-400 font-mono">({alert.product_id})</span>
+                      </div>
+                    )}
                     {alert.is_resolved && (
                       <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-bold">
                         <Check size={14} />
-                        <span>Resolved</span>
+                        <span>Marked done</span>
                       </div>
                     )}
                   </div>
@@ -226,7 +230,7 @@ export default function AlertsPage() {
                     className="shrink-0 flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200"
                   >
                     <Check size={14} />
-                    Resolve
+                    Mark as done
                   </button>
                 )}
               </div>
@@ -240,7 +244,7 @@ export default function AlertsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-8 flex flex-col items-center text-center">
-              {selectedAlert.current_stock < selectedAlert.min_stock ? (
+              {selectedAlert.alert_type === 'LOW_STOCK' && selectedAlert.current_stock < selectedAlert.min_stock ? (
                 <>
                   <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mb-6">
                     <AlertTriangle size={40} />
@@ -262,7 +266,7 @@ export default function AlertsPage() {
                       disabled={submitting}
                       className="text-xs font-bold text-slate-400 hover:text-slate-600 py-2 transition-colors"
                     >
-                      {submitting ? 'Resolving...' : 'Dismiss Anyway (Force Resolve)'}
+                      {submitting ? 'Marking done...' : 'Dismiss Anyway (Force Mark as done)'}
                     </button>
                     <button 
                       onClick={() => setIsResolveModalOpen(false)}
@@ -277,9 +281,11 @@ export default function AlertsPage() {
                   <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-6">
                     <CheckCircle2 size={40} />
                   </div>
-                  <h2 className="text-xl font-bold text-slate-900 mb-2">Resolve Alert?</h2>
+                  <h2 className="text-xl font-bold text-slate-900 mb-2">Mark as done?</h2>
                   <p className="text-sm text-slate-500 mb-8 leading-relaxed">
-                    The stock level is now healthy (<span className="font-bold text-emerald-600">{selectedAlert.current_stock}</span> units). Are you sure you want to mark this alert as resolved?
+                    {selectedAlert.alert_type === 'LOW_STOCK' 
+                      ? `The stock level is now healthy (${selectedAlert.current_stock} units). Are you sure you want to mark this alert as done?`
+                      : `Are you sure you want to mark this notification as done? It will be hidden after 24 hours.`}
                   </p>
                   <div className="flex gap-3 w-full">
                     <button 
@@ -293,7 +299,7 @@ export default function AlertsPage() {
                       disabled={submitting}
                       className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-slate-900 rounded-xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200 disabled:opacity-70"
                     >
-                      {submitting ? 'Resolving...' : 'Yes, Resolve'}
+                      {submitting ? 'Marking done...' : 'Yes, Mark as done'}
                     </button>
                   </div>
                 </>

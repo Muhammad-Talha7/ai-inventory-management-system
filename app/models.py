@@ -67,6 +67,11 @@ class StockTransactions(Base):
     type = Column(Enum("IN", "OUT"))
     source = Column(String(100))
     timestamp = Column(DateTime, default=func.now())
+    status = Column(String(20), default="pending")
+    requested_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    approved_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    reason = Column(String(500), nullable=True)
 
 
 class SalesHistory(Base):
@@ -98,11 +103,14 @@ class Alerts(Base):
     __tablename__ = "alerts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    product_id = Column(String(10), ForeignKey("products.product_id"))
-    alert_type = Column(Enum("LOW", "OVER"))
+    product_id = Column(String(10), ForeignKey("products.product_id"), nullable=True)
+    alert_type = Column(String(50))
+    target_role = Column(String(20)) # "admin", "manager", "staff"
     message = Column(Text)
     is_resolved = Column(Integer, default=0)
     created_at = Column(DateTime, default=func.now())
+    resolved_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
 
 
 class PurchaseOrders(Base):
@@ -113,3 +121,6 @@ class PurchaseOrders(Base):
     order_quantity = Column(Integer)
     status = Column(String(50), default="Scheduled")
     created_at = Column(DateTime, default=func.now())
+    approved_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    rejected_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)

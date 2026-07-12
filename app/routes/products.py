@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from app.models import Products, Inventory, Users
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
-from app.core.dependencies import get_db, get_current_user, require_manager_or_above
+from app.core.dependencies import get_db, require_role
 
 router = APIRouter()
 
@@ -13,7 +13,7 @@ router = APIRouter()
 def create_product(
     product_in: ProductCreate, 
     db: Session = Depends(get_db), 
-    current_user: Users = Depends(require_manager_or_above)
+    current_user: Users = Depends(require_role("manager"))
 ):
     existing_id = db.query(Products).filter(Products.product_id == product_in.product_id).first()
     if existing_id:
@@ -64,7 +64,7 @@ def get_products(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user: Users = Depends(get_current_user)
+    current_user: Users = Depends(require_role("staff", "manager", "admin"))
 ):
     query = db.query(Products)
     
@@ -110,7 +110,7 @@ def get_products(
 def get_product(
     product_id: str,
     db: Session = Depends(get_db),
-    current_user: Users = Depends(get_current_user)
+    current_user: Users = Depends(require_role("staff", "manager", "admin"))
 ):
     prod = db.query(Products).filter(Products.product_id == product_id).first()
     if not prod:
@@ -132,7 +132,7 @@ def update_product(
     product_id: str,
     product_in: ProductUpdate,
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_manager_or_above)
+    current_user: Users = Depends(require_role("manager"))
 ):
     prod = db.query(Products).filter(Products.product_id == product_id).first()
     if not prod:
@@ -160,7 +160,7 @@ def update_product(
 def delete_product(
     product_id: str,
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_manager_or_above)
+    current_user: Users = Depends(require_role("manager"))
 ):
     prod = db.query(Products).filter(Products.product_id == product_id).first()
     if not prod:

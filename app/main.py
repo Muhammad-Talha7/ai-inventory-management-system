@@ -17,9 +17,10 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.forecast import router as forecast_router
 from app.routes.auto_order_router import router as auto_order_router
 from app.routes.purchase_orders import router as purchase_orders_router
-from app.models import Users
+from app.models import Users, PurchaseOrders, Alerts
 from app.core.security import get_password_hash
 from app.ai.forecasting import load_model, train_model
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 scheduler = BackgroundScheduler()
@@ -117,8 +118,53 @@ def startup_event():
         id="monthly_retrain",
         replace_existing=True,
     )
+
+    def check_overdue_pos():
+        """Check for Scheduled POs older than 14 days and alert managers."""
+        db = SessionLocal()
+        try:
+            fourteen_days_ago = datetime.utcnow() - timedelta(days=14)
+            overdue_pos = db.query(PurchaseOrders).filter(
+                PurchaseOrders.status == "Scheduled",
+                PurchaseOrders.created_at <= fourteen_days_ago
+            ).all()
+
+            for po in overdue_pos:
+                # Check if alert already exists to prevent spam
+                existing_alert = db.query(Alerts).filter(
+                    Alerts.product_id == po.product_id,
+                    Alerts.alert_type == "PO_OVERDUE",
+                    Alerts.is_resolved == 0,
+                    Alerts.message.like(f"%{po.order_id}%")
+                ).first()
+
+                if not existing_alert:
+                    new_alert = Alerts(
+                        product_id=po.product_id,
+                        alert_type="PO_OVERDUE",
+                        target_role="manager",
+                        message=f"Purchase Order #{po.order_id} is overdue. Expected delivery was 14+ days ago.",
+                        is_resolved=0
+                    )
+                    db.add(new_alert)
+            db.commit()
+        except Exception as e:
+            logger.error(f"Error checking overdue POs: {e}")
+        finally:
+            db.close()
+
+    # Check for overdue POs daily at 8:00 AM
+    scheduler.add_job(
+        check_overdue_pos,
+        trigger=CronTrigger(hour=8, minute=0),
+        id="daily_overdue_po_check",
+        replace_existing=True,
+    )
+
     scheduler.start()
-    logger.info("APScheduler started — train_model scheduled for 1st of every month at midnight.")
+    # Run the check once on startup just in case
+    scheduler.add_job(check_overdue_pos)
+    logger.info("APScheduler started — cron jobs scheduled.")
 
 
 @app.on_event("shutdown")

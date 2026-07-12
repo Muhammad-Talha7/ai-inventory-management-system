@@ -310,42 +310,6 @@ function ForecastsPageContent() {
                 )}
               </div>
             </div>
-
-            {/* AI Insight Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-indigo-600 rounded-3xl p-6 text-white space-y-4 shadow-xl shadow-indigo-100">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <Zap size={20} />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="font-black text-lg">Smart Reordering</h4>
-                  <p className="text-indigo-100 text-xs leading-relaxed">
-                    Based on predicted demand of {forecastData[0]?.predicted_demand || 0} units next week, we recommend initiating a restock of <span className="font-bold underline">450 units</span> by Friday.
-                  </p>
-                </div>
-                <button className="w-full py-3 bg-white text-indigo-600 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-50 transition-colors">
-                  Approve Restock
-                </button>
-              </div>
-
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4">
-                <div className="w-10 h-10 bg-slate-100 text-indigo-600 rounded-xl flex items-center justify-center">
-                  <Brain size={20} />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="font-black text-lg text-slate-900">Pattern Detected</h4>
-                  <p className="text-slate-500 text-xs leading-relaxed">
-                    A <span className="text-indigo-600 font-bold">12.5% increase</span> in demand is expected due to the upcoming seasonal transition. Local weather conditions (Rainy) correlate with this trend.
-                  </p>
-                </div>
-                <div className="pt-2">
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="w-3/4 h-full bg-indigo-500 rounded-full" />
-                  </div>
-                  <p className="text-[10px] font-black text-slate-400 mt-2 uppercase">Pattern Correlation Strength: 75%</p>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Sidebar Section */}

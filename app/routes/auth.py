@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.schemas.user import UserCreate, UserLogin, UserUpdate
 from app.models import Users
-from app.core.dependencies import get_db, get_current_user, require_admin
+from app.core.dependencies import get_db, get_current_user, require_role
 from app.core.security import verify_password, get_password_hash, create_access_token
 
 router = APIRouter()
 
 @router.post("/register")
-def register(user_in: UserCreate, db: Session = Depends(get_db), current_user: Users = Depends(require_admin)):
+def register(user_in: UserCreate, db: Session = Depends(get_db), current_user: Users = Depends(require_role("admin"))):
     # Check if user exists
     user = db.query(Users).filter(Users.email == user_in.email).first()
     if user:
@@ -99,4 +99,72 @@ def update_me(user_in: UserUpdate, db: Session = Depends(get_db), current_user: 
         "success": True,
         "data": user_data,
         "message": "Profile updated successfully"
+    }
+
+@router.get("/users")
+def get_all_users(db: Session = Depends(get_db), current_user: Users = Depends(require_role("admin"))):
+    users = db.query(Users).all()
+    data = []
+    for u in users:
+        data.append({
+            "user_id": u.user_id,
+            "name": u.name,
+            "email": u.email,
+            "role": u.role,
+            "created_at": u.created_at
+        })
+    return {
+        "success": True,
+        "data": data,
+        "message": "Users retrieved successfully"
+    }
+
+@router.put("/users/{user_id}")
+def update_user(user_id: int, user_in: UserUpdate, db: Session = Depends(get_db), current_user: Users = Depends(require_role("admin"))):
+    user = db.query(Users).filter(Users.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if user_in.name:
+        user.name = user_in.name
+    if user_in.email:
+        existing = db.query(Users).filter(Users.email == user_in.email, Users.user_id != user_id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already taken")
+        user.email = user_in.email
+    if user_in.password:
+        user.password_hash = get_password_hash(user_in.password)
+    if user_in.role:
+        user.role = user_in.role.value
+        
+    db.commit()
+    db.refresh(user)
+    return {
+        "success": True,
+        "data": {
+            "user_id": user.user_id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role,
+            "created_at": user.created_at
+        },
+        "message": "User updated successfully"
+    }
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db), current_user: Users = Depends(require_role("admin"))):
+    user = db.query(Users).filter(Users.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if user.user_id == current_user.user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+        
+    db.delete(user)
+    db.commit()
+    
+    return {
+        "success": True,
+        "data": None,
+        "message": "User deleted successfully"
     }

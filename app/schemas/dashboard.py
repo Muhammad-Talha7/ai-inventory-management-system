@@ -24,5 +24,6 @@ class DashboardResponse(BaseModel):
     out_of_stock_count: int
     active_alerts: int
     total_categories: int
+    pending_stock_requests: int
     recent_transactions: List[RecentTransaction]
     low_stock_items: List[LowStockItem]

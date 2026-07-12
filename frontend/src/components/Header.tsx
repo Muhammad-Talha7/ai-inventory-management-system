@@ -157,8 +157,12 @@ export default function Header() {
                         onClick={() => { setIsNotificationsOpen(false); router.push('/alerts'); }}
                       >
                         <div className="flex gap-3">
-                          <div className={`mt-1 p-2 rounded-lg shrink-0 ${alert.alert_type === 'LOW' ? 'bg-amber-50 text-amber-500' : 'bg-indigo-50 text-indigo-500'
-                            }`}>
+                          <div className={`mt-1 p-2 rounded-lg shrink-0 ${
+                            alert.alert_type === 'LOW_STOCK' || alert.alert_type === 'PO_OVERDUE' || alert.alert_type === 'STOCK_REQ_REJECTED' ? 'bg-rose-50 text-rose-500' : 
+                            alert.alert_type === 'STOCK_REQ_APPROVED' || alert.alert_type === 'PO_APPROVED' ? 'bg-emerald-50 text-emerald-500' :
+                            alert.alert_type === 'STOCK_REQ_SUBMITTED' ? 'bg-amber-50 text-amber-500' :
+                            'bg-indigo-50 text-indigo-500'
+                          }`}>
                             <AlertTriangle size={14} />
                           </div>
                           <div className="flex-1 min-w-0">
