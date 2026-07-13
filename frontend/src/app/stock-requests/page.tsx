@@ -14,7 +14,8 @@ import {
   Calendar,
   Plus,
   Minus,
-  Scan
+  Scan,
+  RefreshCcw
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -87,6 +88,31 @@ function StockRequestsPageContent() {
       }
     } catch (err: any) {
       alert(err.message || `Failed to ${action} request`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleResubmit = async (req: any) => {
+    try {
+      const reason = window.prompt("New reason for resubmitting:") || "Resubmitted";
+      setProcessingId(req.transaction_id);
+      
+      const response = await apiFetch(`/stock/requests`, {
+        method: 'POST',
+        body: JSON.stringify({
+          product_id: req.product_id,
+          transaction_type: req.type,
+          quantity: req.quantity,
+          reason: reason
+        })
+      });
+      if (response.success) {
+        alert("Request successfully resubmitted!");
+        fetchRequests();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to resubmit request');
     } finally {
       setProcessingId(null);
     }
@@ -239,6 +265,20 @@ function StockRequestsPageContent() {
                   >
                     {processingId === req.transaction_id ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
                     Reject
+                  </button>
+                </div>
+              )}
+
+              {/* Action (Staff members only on Rejected requests) */}
+              {!canApprove && req.status === 'rejected' && req.requested_by === user?.user_id && (
+                <div className="flex flex-col gap-2 shrink-0 md:w-32 mt-4 md:mt-0">
+                  <button 
+                    onClick={() => handleResubmit(req)}
+                    disabled={processingId === req.transaction_id}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-sm font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processingId === req.transaction_id ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
+                    Resubmit
                   </button>
                 </div>
               )}
