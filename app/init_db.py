@@ -24,6 +24,7 @@ from app.models import (
     Users, Categories, Suppliers, Products,
     Inventory, SalesHistory, StockTransactions, Forecasts, Alerts,
 )
+from app.core.security import get_password_hash
 
 CSV_PATH = os.path.join(PROJECT_ROOT, "walmart.csv")
 
@@ -62,9 +63,9 @@ def seed():
         print("Inserting Users ...")
         existing_emails = _existing_values(session, Users, Users.email)
         hardcoded_users = [
-            {"name": "Admin",   "email": "admin@warehouse.com",   "role": "admin",   "password_hash": "hashed_password"},
-            {"name": "Manager", "email": "manager@warehouse.com", "role": "manager", "password_hash": "hashed_password"},
-            {"name": "Staff",   "email": "staff@warehouse.com",   "role": "staff",   "password_hash": "hashed_password"},
+            {"name": "Admin",   "email": "admin@warehouse.com",   "role": "admin",   "password_hash": get_password_hash("admin123")},
+            {"name": "Manager", "email": "manager@warehouse.com", "role": "manager", "password_hash": get_password_hash("admin123")},
+            {"name": "Staff",   "email": "staff@warehouse.com",   "role": "staff",   "password_hash": get_password_hash("admin123")},
         ]
         for u in hardcoded_users:
             if u["email"] not in existing_emails:
