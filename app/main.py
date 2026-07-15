@@ -17,6 +17,7 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.forecast import router as forecast_router
 from app.routes.auto_order_router import router as auto_order_router
 from app.routes.purchase_orders import router as purchase_orders_router
+from app.routes.suppliers import router as suppliers_router
 from app.models import Users, PurchaseOrders, Alerts
 from app.core.security import get_password_hash
 from app.ai.forecasting import load_model, train_model
@@ -85,6 +86,7 @@ app.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(forecast_router, prefix="/forecast", tags=["forecast"])
 app.include_router(auto_order_router, prefix="/api/forecast", tags=["auto-order"])
 app.include_router(purchase_orders_router, prefix="/purchase-orders", tags=["purchase-orders"])
+app.include_router(suppliers_router)
 
 # Seed admin user on startup
 @app.on_event("startup")
