@@ -50,8 +50,8 @@
 | Feature | Status | Notes |
 |---|---|---|
 | Supplier Table in Database | ✅ Done | |
-| Supplier CRUD API | ❌ Remaining | No routes exist |
-| Supplier Management Page | ❌ Remaining | No frontend page |
+| Supplier CRUD API | ✅ Done | |
+| Supplier Management Page | ✅ Done | |
 | Link Suppliers to POs | ❌ Remaining | |
 
 ---
@@ -237,7 +237,7 @@
 | Auth & Users | 4 | 3 |
 | Products | 8 | 2 |
 | Categories | 4 | 0 |
-| Suppliers | 1 | 3 |
+| Suppliers | 3 | 1 |
 | Stock Management | 6 | 0 |
 | Stock Approval Workflow | 7 | 2 |
 | Purchase Order Workflow | 4 | 8 |
@@ -251,8 +251,8 @@
 | Reports & Export | 0 | 4 |
 | Audit Logs | 0 | 4 |
 | Security | 3 | 3 |
-| **TOTAL** | **68** | **38** |
+| **TOTAL** | **70** | **36** |
 
-> **Overall Progress: ~64% complete** (68 of 106 features)
+> **Overall Progress: ~66% complete** (70 of 106 features)
 > 
-> **Biggest gaps:** Purchase Order workflow, Suppliers, Reports, Audit Logs, NLP Query
+> **Biggest gaps:** Purchase Order workflow, Reports, Audit Logs, NLP Query

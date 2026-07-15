@@ -27,6 +27,7 @@ const navItems = [
   { icon: Truck, label: 'Stock Management', href: '/stock', roles: ['admin', 'manager', 'staff'] },
   { icon: ClipboardCheck, label: 'Stock Requests', href: '/stock-requests', roles: ['admin', 'manager', 'staff'] },
   { icon: LayoutGrid, label: 'Categories', href: '/categories', roles: ['admin', 'manager'] },
+  { icon: Truck, label: 'Supplier Management', href: '/suppliers', roles: ['admin', 'manager'] },
   { icon: UsersIcon, label: 'User Management', href: '/users', roles: ['admin'] },
   { icon: TrendingUp, label: 'AI Forecasts', href: '/forecasts', roles: ['admin', 'manager'] },
   { icon: ShoppingCart, label: 'Reorder Suggestions', href: '/reorder', roles: ['admin', 'manager'] },
