@@ -87,13 +87,15 @@ export default function Header() {
 
       <div className="flex items-center gap-2 ml-auto">
         {/* New Restock Button */}
-        <button
-          onClick={() => router.push('/stock')}
-          className="flex items-center gap-1.5 text-white bg-indigo-600 rounded-lg text-sm font-semibold transition-all hover:bg-indigo-700 px-4 py-2"
-        >
-          <Plus size={15} strokeWidth={2.5} />
-          New Restock
-        </button>
+        {user?.role !== 'admin' && user?.role !== 'auditor' && (
+          <button
+            onClick={() => router.push('/stock')}
+            className="flex items-center gap-1.5 text-white bg-indigo-600 rounded-lg text-sm font-semibold transition-all hover:bg-indigo-700 px-4 py-2"
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            New Restock
+          </button>
+        )}
 
         {/* Notifications */}
         <div className="relative" ref={dropdownRef}>

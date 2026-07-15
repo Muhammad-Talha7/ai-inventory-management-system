@@ -4,6 +4,7 @@ from app.schemas.user import UserCreate, UserLogin, UserUpdate
 from app.models import Users
 from app.core.dependencies import get_db, get_current_user, require_role
 from app.core.security import verify_password, get_password_hash, create_access_token
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -23,6 +24,16 @@ def register(user_in: UserCreate, db: Session = Depends(get_db), current_user: U
         role=user_in.role.value
     )
     db.add(new_user)
+    db.flush()
+    
+    log_audit(
+        db=db,
+        user_id=current_user.user_id if current_user else None,
+        action="register_user",
+        entity_type="user",
+        entity_id=new_user.user_id,
+        new_values={"email": user_in.email, "role": user_in.role.value}
+    )
     db.commit()
     db.refresh(new_user)
     
@@ -85,6 +96,14 @@ def update_me(user_in: UserUpdate, db: Session = Depends(get_db), current_user: 
     if user_in.password:
         current_user.password_hash = get_password_hash(user_in.password)
         
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="update_profile",
+        entity_type="user",
+        entity_id=current_user.user_id,
+        new_values=user_in.model_dump(exclude_unset=True, exclude={"password"})
+    )    
     db.commit()
     db.refresh(current_user)
     
@@ -137,6 +156,14 @@ def update_user(user_id: int, user_in: UserUpdate, db: Session = Depends(get_db)
     if user_in.role:
         user.role = user_in.role.value
         
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="update_user",
+        entity_type="user",
+        entity_id=user.user_id,
+        new_values=user_in.model_dump(exclude_unset=True, exclude={"password"})
+    )    
     db.commit()
     db.refresh(user)
     return {
@@ -161,6 +188,14 @@ def delete_user(user_id: int, db: Session = Depends(get_db), current_user: Users
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
         
     db.delete(user)
+    
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="delete_user",
+        entity_type="user",
+        entity_id=user.user_id
+    )
     db.commit()
     
     return {

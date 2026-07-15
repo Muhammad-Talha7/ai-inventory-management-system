@@ -17,22 +17,24 @@ import {
   Camera,
   ShoppingCart,
   ClipboardList,
-  ClipboardCheck
+  ClipboardCheck,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/', roles: ['admin', 'manager', 'staff'] },
-  { icon: Package, label: 'Inventory', href: '/inventory', roles: ['admin', 'manager', 'staff'] },
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/', roles: ['admin', 'manager', 'staff', 'auditor'] },
+  { icon: Package, label: 'Inventory', href: '/inventory', roles: ['admin', 'manager', 'staff', 'auditor'] },
   { icon: Truck, label: 'Stock Management', href: '/stock', roles: ['admin', 'manager', 'staff'] },
-  { icon: ClipboardCheck, label: 'Stock Requests', href: '/stock-requests', roles: ['admin', 'manager', 'staff'] },
-  { icon: LayoutGrid, label: 'Categories', href: '/categories', roles: ['admin', 'manager'] },
+  { icon: ClipboardCheck, label: 'Stock Requests', href: '/stock-requests', roles: ['admin', 'manager', 'staff', 'auditor'] },
+  { icon: LayoutGrid, label: 'Categories', href: '/categories', roles: ['admin', 'manager', 'auditor'] },
   { icon: UsersIcon, label: 'User Management', href: '/users', roles: ['admin'] },
   { icon: TrendingUp, label: 'AI Forecasts', href: '/forecasts', roles: ['admin', 'manager'] },
   { icon: ShoppingCart, label: 'Reorder Suggestions', href: '/reorder', roles: ['admin', 'manager'] },
-  { icon: ClipboardList, label: 'Purchase Orders', href: '/purchase-orders', roles: ['admin', 'manager', 'staff'] },
+  { icon: ClipboardList, label: 'Purchase Orders', href: '/purchase-orders', roles: ['admin', 'manager', 'staff', 'auditor'] },
   { icon: Camera, label: 'CV Scanner', href: '/scanner', roles: ['staff'] },
-  { icon: AlertTriangle, label: 'Alerts', href: '/alerts', roles: ['admin', 'manager', 'staff'] },
+  { icon: AlertTriangle, label: 'Alerts', href: '/alerts', roles: ['admin', 'manager', 'staff', 'auditor'] },
+  { icon: ShieldCheck, label: 'Audit Logs', href: '/audit-logs', roles: ['admin', 'auditor'] },
 ];
 
 export default function Sidebar() {

@@ -7,6 +7,7 @@ class RoleEnum(str, Enum):
     admin = "admin"
     manager = "manager"
     staff = "staff"
+    auditor = "auditor"
 
 class UserCreate(BaseModel):
     name: str

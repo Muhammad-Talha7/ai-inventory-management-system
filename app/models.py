@@ -13,7 +13,7 @@ class Users(Base):
     name = Column(String(100))
     email = Column(String(100), unique=True, nullable=False)
     password_hash = Column(String(255))
-    role = Column(Enum("admin", "manager", "staff"))
+    role = Column(Enum("admin", "manager", "staff", "auditor"))
     created_at = Column(DateTime, default=func.now())
 
 
@@ -105,7 +105,8 @@ class Alerts(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     product_id = Column(String(10), ForeignKey("products.product_id"), nullable=True)
     alert_type = Column(String(50))
-    target_role = Column(String(20)) # "admin", "manager", "staff"
+    target_role = Column(String(20))
+    target_user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     message = Column(Text)
     is_resolved = Column(Integer, default=0)
     created_at = Column(DateTime, default=func.now())
@@ -117,10 +118,33 @@ class PurchaseOrders(Base):
     __tablename__ = "purchase_orders"
 
     order_id = Column(Integer, primary_key=True, autoincrement=True)
-    product_id = Column(String(10), ForeignKey("products.product_id"))
-    order_quantity = Column(Integer)
     status = Column(String(50), default="Scheduled")
     created_at = Column(DateTime, default=func.now())
     approved_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     approved_at = Column(DateTime, nullable=True)
     rejected_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    received_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    received_at = Column(DateTime, nullable=True)
+    receiving_notes = Column(Text, nullable=True)
+
+class PurchaseOrderItems(Base):
+    __tablename__ = "purchase_order_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(Integer, ForeignKey("purchase_orders.order_id"))
+    product_id = Column(String(10), ForeignKey("products.product_id"))
+    order_quantity = Column(Integer)
+    received_quantity = Column(Integer, nullable=True)
+
+class AuditLogs(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    action = Column(String(255))
+    entity_type = Column(String(100))
+    entity_id = Column(String(100))
+    old_values = Column(Text, nullable=True)
+    new_values = Column(Text, nullable=True)
+    ip_address = Column(String(45), nullable=True)
+    timestamp = Column(DateTime, default=func.now())
