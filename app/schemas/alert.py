@@ -6,7 +6,8 @@ class AlertResponse(BaseModel):
     id: int
     product_id: Optional[str] = None
     alert_type: str
-    target_role: str
+    target_role: Optional[str] = None
+    target_user_id: Optional[int] = None
     message: str
     is_resolved: int
     created_at: datetime

@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_db, require_role
-from app.models import Inventory, PurchaseOrders, Users
+from app.models import Inventory, PurchaseOrders, PurchaseOrderItems, Users
 from sqlalchemy import func
 from app.ai.forecasting import bulk_forecast_demand
+from app.core.audit import log_audit
 import math
 import logging
 
@@ -32,11 +33,12 @@ def run_weekly_forecast(
         # Subquery to calculate incoming stock (Scheduled or Approved Purchase Orders)
         incoming_subq = (
             db.query(
-                PurchaseOrders.product_id,
-                func.sum(PurchaseOrders.order_quantity).label("incoming_stock")
+                PurchaseOrderItems.product_id,
+                func.sum(PurchaseOrderItems.order_quantity).label("incoming_stock")
             )
+            .join(PurchaseOrders, PurchaseOrderItems.order_id == PurchaseOrders.order_id)
             .filter(PurchaseOrders.status.in_(["Scheduled", "Pending Approval"]))
-            .group_by(PurchaseOrders.product_id)
+            .group_by(PurchaseOrderItems.product_id)
             .subquery()
         )
 
@@ -52,7 +54,7 @@ def run_weekly_forecast(
             .all()
         )
         
-        orders_scheduled = 0
+        items_to_order = []
         for inv in inventory_records:
             pid = inv.product_id
             current_stock = inv.current_stock
@@ -72,14 +74,32 @@ def run_weekly_forecast(
             order_qty = math.ceil(shortfall)
             
             if order_qty > 0:
-                # Insert a new record into the Purchase_Orders table
-                    new_order = PurchaseOrders(
-                        product_id=pid,
-                        order_quantity=order_qty,
-                        status='Scheduled'
-                    )
-                    db.add(new_order)
-                    orders_scheduled += 1
+                items_to_order.append({"product_id": pid, "order_qty": order_qty})
+        
+        orders_scheduled = 0
+        if items_to_order:
+            new_order = PurchaseOrders(status='Scheduled')
+            db.add(new_order)
+            db.flush()
+            
+            for item in items_to_order:
+                po_item = PurchaseOrderItems(
+                    order_id=new_order.order_id,
+                    product_id=item["product_id"],
+                    order_quantity=item["order_qty"]
+                )
+                db.add(po_item)
+                
+            orders_scheduled = 1
+            
+            log_audit(
+                db=db,
+                user_id=current_user.user_id,
+                action="create_ai_order",
+                entity_type="purchase_order",
+                entity_id=new_order.order_id,
+                new_values={"item_count": len(items_to_order)}
+            )
         
         # Commit to the database
         db.commit()

@@ -238,6 +238,7 @@ export default function UsersPage() {
                     <option value="staff">Staff (View & Stock)</option>
                     <option value="manager">Manager (Edit Products)</option>
                     <option value="admin">Admin (Full Access)</option>
+                    <option value="auditor">Auditor (Read Only)</option>
                   </select>
                 </div>
               </div>
@@ -266,6 +267,7 @@ export default function UsersPage() {
               <p><strong>Admin:</strong> User Management & Oversight. No operational write access.</p>
               <p><strong>Manager:</strong> Catalog editing, inventory management, approving orders.</p>
               <p><strong>Staff:</strong> View inventory and create stock IN/OUT requests.</p>
+              <p><strong>Auditor:</strong> Read-only access to view system activity and logs.</p>
             </div>
           </div>
         </div>
@@ -340,11 +342,13 @@ export default function UsersPage() {
                               <option value="staff">Staff</option>
                               <option value="manager">Manager</option>
                               <option value="admin">Admin</option>
+                              <option value="auditor">Auditor</option>
                             </select>
                           ) : (
                             <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
                               u.role === 'admin' ? 'bg-rose-100 text-rose-700' :
                               u.role === 'manager' ? 'bg-indigo-100 text-indigo-700' :
+                              u.role === 'auditor' ? 'bg-amber-100 text-amber-700' :
                               'bg-slate-100 text-slate-700'
                             }`}>
                               {u.role}

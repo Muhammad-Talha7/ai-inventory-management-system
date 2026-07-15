@@ -11,6 +11,7 @@ from app.schemas.stock import (
     StockRequestCreate, StockRequestResponse,
 )
 from app.core.dependencies import get_db, get_current_user, require_role
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -26,6 +27,14 @@ class ScanCreate(BaseModel):
 
 class BulkScanCreate(BaseModel):
     scans: List[ScanCreate]
+
+ADJUSTMENT_TYPES = ("shrinkage", "theft_loss", "damage", "physical_count", "other")
+
+class InventoryAdjustCreate(BaseModel):
+    product_id: str
+    quantity: int
+    adjustment_type: str
+    notes: Optional[str] = None
 
 # ---------- Helpers ----------
 
@@ -57,7 +66,7 @@ def _apply_inventory_change(db: Session, product_id: str, quantity: int,
         existing_alert = db.query(Alerts).filter(
             Alerts.product_id == product_id,
             Alerts.is_resolved == 0,
-            Alerts.alert_type == "LOW",
+            Alerts.alert_type == "LOW_STOCK",
         ).first()
         if not existing_alert:
             db.add(Alerts(
@@ -114,6 +123,16 @@ def create_stock_request(
     )
     db.add(new_tx)
     db.add(new_alert)
+    db.flush()
+    
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="create_request",
+        entity_type="stock_transaction",
+        entity_id=new_tx.transaction_id,
+        new_values={"type": request_in.transaction_type, "quantity": request_in.quantity}
+    )
     db.commit()
     db.refresh(new_tx)
 
@@ -143,7 +162,7 @@ def list_stock_requests(
     limit: int = Query(50),
     offset: int = Query(0),
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("staff", "manager", "admin")),
+    current_user: Users = Depends(require_role("staff", "manager", "admin", "auditor")),
 ):
     """List stock requests with optional status filter.
     Staff sees only their own; manager/admin sees all."""
@@ -253,6 +272,14 @@ def approve_stock_request(
     )
     db.add(staff_alert)
 
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="approve_request",
+        entity_type="stock_transaction",
+        entity_id=tx.transaction_id,
+        new_values={"status": "approved"}
+    )
     db.commit()
     db.refresh(tx)
 
@@ -305,6 +332,7 @@ def reject_stock_request(
     tx.status = "rejected"
     tx.approved_by = current_user.user_id  # "approved_by" doubles as "acted_by"
     tx.approved_at = datetime.utcnow()
+    tx.reason = reason
 
     # Resolve associated alert
     alert = db.query(Alerts).filter(
@@ -327,6 +355,14 @@ def reject_stock_request(
     )
     db.add(staff_alert)
 
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="reject_request",
+        entity_type="stock_transaction",
+        entity_id=tx.transaction_id,
+        new_values={"status": "rejected", "reason": reason}
+    )
     db.commit()
     db.refresh(tx)
 
@@ -387,6 +423,16 @@ def scan_transaction(
         )
         db.add(new_tx)
         db.add(new_alert)
+        db.flush()
+        
+        log_audit(
+            db=db,
+            user_id=current_user.user_id,
+            action="scan_transaction",
+            entity_type="stock_transaction",
+            entity_id=new_tx.transaction_id,
+            new_values={"type": scan_in.type, "quantity": scan_in.quantity, "status": "pending"}
+        )
         db.commit()
         db.refresh(new_tx)
 
@@ -423,6 +469,16 @@ def scan_transaction(
         )
         db.add(new_tx)
         db.add(new_alert)
+        db.flush()
+        
+        log_audit(
+            db=db,
+            user_id=current_user.user_id,
+            action="scan_transaction",
+            entity_type="stock_transaction",
+            entity_id=new_tx.transaction_id,
+            new_values={"type": scan_in.type, "quantity": scan_in.quantity, "status": "pending"}
+        )
         db.commit()
         db.refresh(new_tx)
 
@@ -479,6 +535,16 @@ def bulk_scan_transactions(
         db.add(new_alert)
         transactions.append(new_tx)
         
+    db.flush()
+    for tx in transactions:
+        log_audit(
+            db=db,
+            user_id=current_user.user_id,
+            action="bulk_scan_transaction",
+            entity_type="stock_transaction",
+            entity_id=tx.transaction_id,
+            new_values={"type": tx.type, "quantity": tx.quantity, "status": "pending"}
+        )
     db.commit()
     
     return {
@@ -527,6 +593,16 @@ def create_transaction(
     )
     db.add(new_tx)
     db.add(new_alert)
+    db.flush()
+    
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="create_legacy_transaction",
+        entity_type="stock_transaction",
+        entity_id=new_tx.transaction_id,
+        new_values={"type": transaction_in.type, "quantity": transaction_in.quantity, "status": "pending"}
+    )
     db.commit()
     db.refresh(new_tx)
 
@@ -544,7 +620,7 @@ def create_transaction(
 @router.get("/", response_model=dict)
 def get_inventory(
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("staff", "manager", "admin")),
+    current_user: Users = Depends(require_role("staff", "manager", "admin", "auditor")),
 ):
     results = db.query(Products, Inventory).outerjoin(
         Inventory, Products.product_id == Inventory.product_id
@@ -573,7 +649,7 @@ def get_inventory(
 def get_product_inventory(
     product_id: str,
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("staff", "manager", "admin")),
+    current_user: Users = Depends(require_role("staff", "manager", "admin", "auditor")),
 ):
     result = db.query(Products, Inventory).outerjoin(
         Inventory, Products.product_id == Inventory.product_id
@@ -604,7 +680,7 @@ def get_product_inventory(
 def get_stock_history(
     product_id: str,
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("staff", "manager", "admin")),
+    current_user: Users = Depends(require_role("staff", "manager", "admin", "auditor")),
 ):
     transactions = (
         db.query(StockTransactions)
@@ -618,4 +694,85 @@ def get_stock_history(
         "success": True,
         "data": data,
         "message": "Stock history retrieved successfully",
+    }
+
+
+@router.post("/adjust", response_model=dict)
+def adjust_inventory(
+    adjust_in: InventoryAdjustCreate,
+    db: Session = Depends(get_db),
+    current_user: Users = Depends(require_role("manager")),
+):
+    if adjust_in.adjustment_type not in ADJUSTMENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"adjustment_type must be one of: {', '.join(ADJUSTMENT_TYPES)}"
+        )
+    if adjust_in.quantity == 0:
+        raise HTTPException(status_code=400, detail="Quantity cannot be zero")
+
+    product = db.query(Products).filter(Products.product_id == adjust_in.product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    inv = db.query(Inventory).filter(Inventory.product_id == adjust_in.product_id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Inventory record not found for this product")
+
+    old_stock = inv.current_stock
+    new_stock = old_stock + adjust_in.quantity
+
+    if new_stock < 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Adjustment would result in negative stock ({new_stock}). Current stock: {old_stock}"
+        )
+
+    inv.current_stock = new_stock
+    inv.last_updated = func.now()
+
+    tx_type = "IN" if adjust_in.quantity > 0 else "OUT"
+    new_tx = StockTransactions(
+        product_id=adjust_in.product_id,
+        user_id=current_user.user_id,
+        quantity=abs(adjust_in.quantity),
+        type=tx_type,
+        source="Inventory Adjustment",
+        status="approved",
+        requested_by=current_user.user_id,
+        approved_by=current_user.user_id,
+        approved_at=datetime.utcnow(),
+        reason=f"[{adjust_in.adjustment_type.upper()}] {adjust_in.notes or ''}".strip(),
+    )
+    db.add(new_tx)
+    db.flush()
+
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="inventory_adjustment",
+        entity_type="inventory",
+        entity_id=adjust_in.product_id,
+        old_values={"stock": old_stock},
+        new_values={
+            "stock": new_stock,
+            "change": adjust_in.quantity,
+            "adjustment_type": adjust_in.adjustment_type,
+            "notes": adjust_in.notes
+        }
+    )
+    db.commit()
+
+    return {
+        "success": True,
+        "data": {
+            "product_id": adjust_in.product_id,
+            "product_name": product.product_name,
+            "old_stock": old_stock,
+            "new_stock": new_stock,
+            "change": adjust_in.quantity,
+            "adjustment_type": adjust_in.adjustment_type,
+            "transaction_id": new_tx.transaction_id,
+        },
+        "message": f"Inventory adjusted from {old_stock} to {new_stock} units"
     }

@@ -9,9 +9,9 @@ from app.core.dependencies import get_db, require_role
 router = APIRouter()
 
 @router.get("/", response_model=dict)
-def get_dashboard(
+def get_dashboard_metrics(
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("staff", "manager", "admin"))
+    current_user: Users = Depends(require_role("staff", "manager", "admin", "auditor"))
 ):
     total_products = db.query(func.count(Products.product_id)).scalar() or 0
     total_categories = db.query(func.count(Categories.category_id)).scalar() or 0

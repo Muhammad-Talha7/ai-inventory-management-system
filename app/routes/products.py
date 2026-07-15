@@ -6,6 +6,7 @@ from typing import List, Optional
 from app.models import Products, Inventory, Users
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
 from app.core.dependencies import get_db, require_role
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -46,6 +47,14 @@ def create_product(
     )
     db.add(new_inv)
     
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="create_product",
+        entity_type="product",
+        entity_id=new_prod.product_id,
+        new_values=product_in.model_dump()
+    )
     db.commit()
     db.refresh(new_prod)
     
@@ -64,7 +73,7 @@ def get_products(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=1000),
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("staff", "manager", "admin"))
+    current_user: Users = Depends(require_role("staff", "manager", "admin", "auditor"))
 ):
     query = db.query(Products)
     
@@ -110,7 +119,7 @@ def get_products(
 def get_product(
     product_id: str,
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("staff", "manager", "admin"))
+    current_user: Users = Depends(require_role("staff", "manager", "admin", "auditor"))
 ):
     prod = db.query(Products).filter(Products.product_id == product_id).first()
     if not prod:
@@ -147,6 +156,14 @@ def update_product(
     for key, value in update_data.items():
         setattr(prod, key, value)
         
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="update_product",
+        entity_type="product",
+        entity_id=prod.product_id,
+        new_values=update_data
+    )
     db.commit()
     db.refresh(prod)
     
@@ -169,6 +186,13 @@ def delete_product(
     # Optional: Check if product has inventory or stock transactions before deleting
     
     db.delete(prod)
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="delete_product",
+        entity_type="product",
+        entity_id=prod.product_id
+    )
     db.commit()
     
     return {

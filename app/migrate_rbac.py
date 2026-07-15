@@ -40,6 +40,14 @@ def migrate():
     print("=" * 60)
 
     with engine.connect() as conn:
+        # -- users ------------------------------------------------------------
+        print("\n0) users")
+        try:
+            conn.execute(text("ALTER TABLE `users` MODIFY COLUMN `role` ENUM('admin', 'manager', 'staff', 'auditor')"))
+            print("  [OK] users: updated role enum to include auditor")
+        except Exception as e:
+            print(f"  [ERROR] users: {e}")
+
         # -- stock_transactions -----------------------------------------------
         print("\n1) stock_transactions")
         _add_column(conn, "stock_transactions",
@@ -79,10 +87,19 @@ def migrate():
                     "approved_at DATETIME NULL")
         _add_column(conn, "purchase_orders",
                     "rejected_by INT NULL")
+        _add_column(conn, "purchase_orders",
+                    "received_quantity INT NULL")
+        _add_column(conn, "purchase_orders",
+                    "received_by INT NULL")
+        _add_column(conn, "purchase_orders",
+                    "received_at DATETIME NULL")
+        _add_column(conn, "purchase_orders",
+                    "receiving_notes TEXT NULL")
 
         for fk_name, col in [
             ("fk_po_approved_by", "approved_by"),
             ("fk_po_rejected_by", "rejected_by"),
+            ("fk_po_received_by", "received_by"),
         ]:
             try:
                 conn.execute(text(
@@ -114,10 +131,83 @@ def migrate():
             else:
                 raise
 
+        # -- audit_logs -------------------------------------------------------
+        print("\n4) audit_logs")
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS `audit_logs` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `user_id` INT NULL,
+                    `action` VARCHAR(255),
+                    `entity_type` VARCHAR(100),
+                    `entity_id` VARCHAR(100),
+                    `old_values` TEXT NULL,
+                    `new_values` TEXT NULL,
+                    `ip_address` VARCHAR(45) NULL,
+                    `timestamp` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT `fk_audit_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`user_id`)
+                )
+            """))
+            print("  [OK] audit_logs table created")
+        except Exception as e:
+            print(f"  [ERROR] audit_logs: {e}")
+        # -- purchase_order_items ---------------------------------------------
+        print("\n4.5) purchase_order_items")
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS `purchase_order_items` (
+                    `id` INT AUTO_INCREMENT PRIMARY KEY,
+                    `order_id` INT NOT NULL,
+                    `product_id` VARCHAR(10) NOT NULL,
+                    `order_quantity` INT NOT NULL,
+                    `received_quantity` INT NULL,
+                    CONSTRAINT `fk_poi_order_id` FOREIGN KEY (`order_id`) REFERENCES `purchase_orders`(`order_id`),
+                    CONSTRAINT `fk_poi_product_id` FOREIGN KEY (`product_id`) REFERENCES `products`(`product_id`)
+                )
+            """))
+            print("  [OK] purchase_order_items table created")
+        except Exception as e:
+            print(f"  [ERROR] purchase_order_items: {e}")
+
+        # Migrate data from purchase_orders to purchase_order_items
+        try:
+            # Only migrate if columns still exist in purchase_orders
+            conn.execute(text("SELECT product_id FROM purchase_orders LIMIT 1"))
+            print("  [INFO] Migrating existing POs to purchase_order_items...")
+            conn.execute(text("""
+                INSERT INTO purchase_order_items (order_id, product_id, order_quantity, received_quantity)
+                SELECT order_id, product_id, order_quantity, received_quantity
+                FROM purchase_orders
+                WHERE product_id IS NOT NULL
+            """))
+            print("  [OK] Data migrated successfully.")
+
+            # Drop old columns (requires dropping foreign keys first if any, but product_id has one)
+            try:
+                conn.execute(text("ALTER TABLE `purchase_orders` DROP FOREIGN KEY `purchase_orders_ibfk_1`"))
+            except Exception:
+                pass # ignore if it doesn't exist
+            
+            try:
+                conn.execute(text("ALTER TABLE `purchase_orders` DROP FOREIGN KEY `fk_po_product_id`"))
+            except Exception:
+                pass
+                
+            conn.execute(text("ALTER TABLE `purchase_orders` DROP COLUMN `product_id`"))
+            conn.execute(text("ALTER TABLE `purchase_orders` DROP COLUMN `order_quantity`"))
+            conn.execute(text("ALTER TABLE `purchase_orders` DROP COLUMN `received_quantity`"))
+            print("  [OK] Dropped product_id, order_quantity, received_quantity from purchase_orders")
+            
+        except Exception as e:
+            if "Unknown column" in str(e):
+                print("  [SKIP] Data already migrated, old columns do not exist.")
+            else:
+                print(f"  [ERROR] Data migration: {e}")
+
         conn.commit()
 
     # -- Backfill existing stock_transactions ---------------------------------
-    print("\n4) Backfill: existing stock_transactions -> status='approved', requested_by=user_id")
+    print("\n5) Backfill: existing stock_transactions -> status='approved', requested_by=user_id")
     with engine.connect() as conn:
         result = conn.execute(text(
             "UPDATE stock_transactions "
@@ -128,7 +218,7 @@ def migrate():
         print(f"  [OK] {result.rowcount} rows updated")
 
     # -- Seed cv_system actor -------------------------------------------------
-    print("\n5) Seed reserved cv_system actor")
+    print("\n6) Seed reserved cv_system actor")
     session = SessionLocal()
     try:
         existing = session.query(Users).filter(

@@ -22,7 +22,8 @@ import {
   ChevronDown,
   Check,
   AlertTriangle,
-  Loader2
+  Loader2,
+  SlidersHorizontal
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -57,8 +58,15 @@ function InventoryPageContent() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [adjustForm, setAdjustForm] = useState({
+    quantity: '',
+    adjustment_type: 'physical_count',
+    notes: ''
+  });
 
   // Form state
   const [formData, setFormData] = useState({
@@ -213,6 +221,40 @@ function InventoryPageContent() {
   const resetForm = () => {
     setFormData({ product_id: '', product_name: '', sku: '', category_id: '', unit_price: '', cost_price: '', supplier_id: 'SUP001' });
     setSelectedProduct(null);
+  };
+
+  const openAdjustModal = (product: any) => {
+    setSelectedProduct(product);
+    setAdjustForm({ quantity: '', adjustment_type: 'physical_count', notes: '' });
+    setIsAdjustModalOpen(true);
+  };
+
+  const handleAdjustStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustForm.quantity || parseInt(adjustForm.quantity) === 0) {
+      alert('Quantity cannot be zero.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await apiFetch('/stock/adjust', {
+        method: 'POST',
+        body: JSON.stringify({
+          product_id: selectedProduct.product_id,
+          quantity: parseInt(adjustForm.quantity),
+          adjustment_type: adjustForm.adjustment_type,
+          notes: adjustForm.notes || undefined,
+        }),
+      });
+      if (response.success) {
+        setIsAdjustModalOpen(false);
+        fetchData();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to adjust stock');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const totalPages = Math.ceil(totalCount / itemsPerPage);
@@ -448,6 +490,13 @@ function InventoryPageContent() {
                         </button>
                         {canEdit && (
                           <>
+                            <button 
+                              onClick={() => openAdjustModal(product)}
+                              className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                              title="Adjust Stock"
+                            >
+                              <SlidersHorizontal size={18} />
+                            </button>
                             <button 
                               onClick={() => openEditModal(product)}
                               className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -732,6 +781,87 @@ function InventoryPageContent() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isAdjustModalOpen && selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center">
+                  <SlidersHorizontal size={18} className="text-amber-600" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Adjust Stock</h2>
+                  <p className="text-xs text-slate-400 mt-0.5 max-w-[220px] truncate">{selectedProduct.product_name}</p>
+                </div>
+              </div>
+              <button onClick={() => setIsAdjustModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleAdjustStock} className="p-6 space-y-4">
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex justify-between items-center">
+                <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Current Stock</span>
+                <span className="text-2xl font-black text-amber-700">{selectedProduct.inventory_quantity}</span>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Quantity Change</label>
+                <input
+                  required
+                  type="number"
+                  placeholder="e.g. -50 for loss, +20 for gain"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 outline-none transition-all"
+                  value={adjustForm.quantity}
+                  onChange={e => setAdjustForm({ ...adjustForm, quantity: e.target.value })}
+                />
+                <p className="text-[10px] text-slate-400">Use negative (-) for losses, positive (+) for gains.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Reason</label>
+                <select
+                  required
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500/20 outline-none appearance-none"
+                  value={adjustForm.adjustment_type}
+                  onChange={e => setAdjustForm({ ...adjustForm, adjustment_type: e.target.value })}
+                >
+                  <option value="physical_count">Physical Count Correction</option>
+                  <option value="shrinkage">Shrinkage</option>
+                  <option value="theft_loss">Theft / Loss</option>
+                  <option value="damage">Damage</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Notes (Optional)</label>
+                <textarea
+                  rows={2}
+                  placeholder="Additional details..."
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-500/20 outline-none transition-all resize-none"
+                  value={adjustForm.notes}
+                  onChange={e => setAdjustForm({ ...adjustForm, notes: e.target.value })}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAdjustModalOpen(false)}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2.5 text-sm font-semibold text-white bg-amber-500 rounded-xl hover:bg-amber-600 transition-colors shadow-lg shadow-amber-100 disabled:opacity-70 flex items-center justify-center gap-2"
+                >
+                  {submitting ? <Loader2 className="animate-spin" size={16} /> : <SlidersHorizontal size={16} />}
+                  {submitting ? 'Adjusting...' : 'Apply Adjustment'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

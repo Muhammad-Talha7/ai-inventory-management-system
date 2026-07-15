@@ -5,6 +5,7 @@ from typing import List
 from app.models import Categories, Products, Users
 from app.schemas.category import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.core.dependencies import get_db, require_role
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -20,6 +21,16 @@ def create_category(
     
     new_cat = Categories(name=category_in.name)
     db.add(new_cat)
+    db.flush()
+    
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="create_category",
+        entity_type="category",
+        entity_id=new_cat.category_id,
+        new_values={"name": category_in.name}
+    )
     db.commit()
     db.refresh(new_cat)
     
@@ -32,7 +43,7 @@ def create_category(
 @router.get("/", response_model=dict)
 def get_categories(
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("staff", "manager", "admin"))
+    current_user: Users = Depends(require_role("staff", "manager", "admin", "auditor"))
 ):
     cats = db.query(Categories).all()
     data = [CategoryResponse.model_validate(c).model_dump() for c in cats]
@@ -46,7 +57,7 @@ def get_categories(
 def get_category(
     category_id: int,
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("staff", "manager", "admin"))
+    current_user: Users = Depends(require_role("staff", "manager", "admin", "auditor"))
 ):
     cat = db.query(Categories).filter(Categories.category_id == category_id).first()
     if not cat:
@@ -73,6 +84,15 @@ def update_category(
         raise HTTPException(status_code=400, detail="Category with this name already exists")
         
     cat.name = category_in.name
+    
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="update_category",
+        entity_type="category",
+        entity_id=cat.category_id,
+        new_values={"name": category_in.name}
+    )
     db.commit()
     db.refresh(cat)
     
@@ -97,6 +117,14 @@ def delete_category(
         raise HTTPException(status_code=400, detail="Cannot delete category because it has associated products")
         
     db.delete(cat)
+    
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="delete_category",
+        entity_type="category",
+        entity_id=cat.category_id
+    )
     db.commit()
     
     return {
