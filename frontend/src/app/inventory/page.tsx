@@ -35,6 +35,7 @@ function InventoryPageContent() {
   const canEdit = user?.role === 'manager';
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -76,7 +77,7 @@ function InventoryPageContent() {
     category_id: '',
     unit_price: '',
     cost_price: '',
-    supplier_id: 'SUP001'
+    supplier_id: ''
   });
 
   useEffect(() => {
@@ -101,9 +102,10 @@ function InventoryPageContent() {
       if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
       if (selectedCategory) url += `&category_id=${selectedCategory}`;
 
-      const [prodRes, catRes] = await Promise.all([
+      const [prodRes, catRes, suppRes] = await Promise.all([
         apiFetch(url),
-        apiFetch('/categories/')
+        apiFetch('/categories/'),
+        apiFetch('/suppliers/')
       ]);
       
       if (prodRes.success) {
@@ -111,6 +113,7 @@ function InventoryPageContent() {
         setTotalCount(prodRes.total_count || 0);
       }
       if (catRes.success) setCategories(catRes.data);
+      if (Array.isArray(suppRes)) setSuppliers(suppRes);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch data');
     } finally {
@@ -139,7 +142,7 @@ function InventoryPageContent() {
       category_id: product.category_id?.toString() || '',
       unit_price: product.unit_price.toString(),
       cost_price: product.cost_price.toString(),
-      supplier_id: product.supplier_id || 'SUP001'
+      supplier_id: product.supplier_id || ''
     });
     setIsEditModalOpen(true);
   };
@@ -158,6 +161,7 @@ function InventoryPageContent() {
         body: JSON.stringify({
           ...formData,
           category_id: formData.category_id ? parseInt(formData.category_id) : null,
+          supplier_id: formData.supplier_id || null,
           unit_price: parseFloat(formData.unit_price),
           cost_price: parseFloat(formData.cost_price),
         })
@@ -186,7 +190,7 @@ function InventoryPageContent() {
           category_id: formData.category_id ? parseInt(formData.category_id) : null,
           unit_price: parseFloat(formData.unit_price),
           cost_price: parseFloat(formData.cost_price),
-          supplier_id: formData.supplier_id
+          supplier_id: formData.supplier_id || null
         })
       });
       if (response.success) {
@@ -219,7 +223,7 @@ function InventoryPageContent() {
   };
 
   const resetForm = () => {
-    setFormData({ product_id: '', product_name: '', sku: '', category_id: '', unit_price: '', cost_price: '', supplier_id: 'SUP001' });
+    setFormData({ product_id: '', product_name: '', sku: '', category_id: '', unit_price: '', cost_price: '', supplier_id: '' });
     setSelectedProduct(null);
   };
 
@@ -629,6 +633,19 @@ function InventoryPageContent() {
                   ))}
                 </select>
               </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase">Supplier</label>
+                <select 
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none appearance-none"
+                  value={formData.supplier_id}
+                  onChange={e => setFormData({...formData, supplier_id: e.target.value})}
+                >
+                  <option value="">Select Supplier</option>
+                  {suppliers.map(sup => (
+                    <option key={sup.supplier_id} value={sup.supplier_id}>{sup.name} ({sup.supplier_id})</option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase">Unit Price ($)</label>
@@ -758,7 +775,7 @@ function InventoryPageContent() {
                     <Truck size={16} />
                     <span className="text-[10px] font-bold uppercase tracking-wider">Supplier ID</span>
                   </div>
-                  <p className="text-lg font-bold text-slate-900">{selectedProduct.supplier_id || 'N/A'}</p>
+                  <p className="text-lg font-bold text-slate-900">{selectedProduct.supplier_id ? (suppliers.find(s => s.supplier_id === selectedProduct.supplier_id)?.name || selectedProduct.supplier_id) : 'N/A'}</p>
                 </div>
               </div>
 

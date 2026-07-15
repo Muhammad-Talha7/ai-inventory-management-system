@@ -5,8 +5,7 @@ from typing import List
 from app.models import Suppliers, Users
 from app.schemas.supplier import SupplierCreate, SupplierUpdate, SupplierResponse
 from app.core.dependencies import get_db, get_current_user, require_role
-
-router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
+router = APIRouter()
 
 @router.get("/", response_model=List[SupplierResponse])
 def get_suppliers(
