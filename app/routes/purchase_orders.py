@@ -3,14 +3,40 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy import case, cast, Date
+from pydantic import BaseModel
 
 from app.core.dependencies import get_db, require_role
 from app.core.audit import log_audit
 from app.models import PurchaseOrders, PurchaseOrderItems, Products, Users, Inventory, StockTransactions, Alerts
-from app.schemas.purchase_order import PurchaseOrderResponse, ManualOrderCreate
+from app.schemas.purchase_order import PurchaseOrderResponse, ManualOrderCreate, OrderItemsUpdate
 
 router = APIRouter()
 
+# In-memory temporary store for CV scanner PO receiving session
+# Maps sku -> quantity
+PO_SCAN_SESSION: dict[str, int] = {}
+
+class POScanItem(BaseModel):
+    sku: str
+    quantity: int = 1
+
+@router.post("/scan-session")
+def add_to_scan_session(scan: POScanItem):
+    """CV module posts here when in PO mode."""
+    PO_SCAN_SESSION[scan.sku] = PO_SCAN_SESSION.get(scan.sku, 0) + scan.quantity
+    return {"success": True, "scanned_total": sum(PO_SCAN_SESSION.values())}
+
+@router.get("/scan-session")
+def get_scan_session(current_user: Users = Depends(require_role("staff", "manager"))):
+    """Frontend polls this to see the live tally of scanned items."""
+    items = [{"sku": sku, "quantity": qty} for sku, qty in PO_SCAN_SESSION.items()]
+    return {"success": True, "data": items, "total": sum(PO_SCAN_SESSION.values())}
+
+@router.delete("/scan-session")
+def clear_scan_session(current_user: Users = Depends(require_role("staff", "manager"))):
+    """Clear the session after a successful PO match and submit, or to reset."""
+    PO_SCAN_SESSION.clear()
+    return {"success": True}
 @router.get("/", response_model=dict)
 def get_purchase_orders(
     page: int = 1,
@@ -73,6 +99,7 @@ def get_purchase_orders(
             "received_by": po.received_by,
             "received_at": po.received_at,
             "receiving_notes": po.receiving_notes,
+            "supplier_id": po.supplier_id,
             "items": item_list
         }
         data.append(PurchaseOrderResponse(**po_dict).model_dump())
@@ -336,8 +363,10 @@ def create_manual_order(
         product = db.query(Products).filter(Products.product_id == item.product_id).first()
         if not product:
             raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
+        if product.supplier_id != order_in.supplier_id:
+            raise HTTPException(status_code=400, detail=f"Product {item.product_id} does not belong to supplier {order_in.supplier_id}")
 
-    new_order = PurchaseOrders(status="Scheduled")
+    new_order = PurchaseOrders(status="Scheduled", supplier_id=order_in.supplier_id)
     db.add(new_order)
     db.flush()
     
@@ -363,4 +392,58 @@ def create_manual_order(
     return {
         "success": True,
         "message": "Manual purchase order created successfully"
+    }
+
+@router.patch("/{order_id}/items", response_model=dict)
+def update_order_items(
+    order_id: int,
+    update_data: OrderItemsUpdate,
+    db: Session = Depends(get_db),
+    current_user: Users = Depends(require_role("manager")),
+):
+    order = db.query(PurchaseOrders).filter(PurchaseOrders.order_id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+
+    if order.status not in ["Scheduled", "Pending Approval"]:
+        raise HTTPException(status_code=400, detail=f"Cannot edit items for order with status '{order.status}'")
+
+    if not update_data.items:
+        raise HTTPException(status_code=400, detail="Order must have at least one item")
+
+    # Validate all new items belong to the same supplier
+    for item in update_data.items:
+        if item.order_quantity <= 0:
+            raise HTTPException(status_code=400, detail="Order quantity must be > 0 for all items")
+        product = db.query(Products).filter(Products.product_id == item.product_id).first()
+        if not product:
+            raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
+        if order.supplier_id and product.supplier_id != order.supplier_id:
+            raise HTTPException(status_code=400, detail=f"Product {item.product_id} does not belong to supplier {order.supplier_id}")
+
+    # Delete old items
+    db.query(PurchaseOrderItems).filter(PurchaseOrderItems.order_id == order_id).delete()
+
+    # Insert new items
+    for item in update_data.items:
+        po_item = PurchaseOrderItems(
+            order_id=order.order_id,
+            product_id=item.product_id,
+            order_quantity=item.order_quantity
+        )
+        db.add(po_item)
+
+    log_audit(
+        db=db,
+        user_id=current_user.user_id,
+        action="update_items",
+        entity_type="purchase_order",
+        entity_id=order.order_id,
+        new_values={"item_count": len(update_data.items)}
+    )
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Purchase order items updated successfully"
     }

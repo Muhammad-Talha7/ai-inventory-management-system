@@ -8,6 +8,7 @@ stock transactions (IN or OUT) to the warehouse API.
 Usage:
     python -m app.ai.cv_counting IN
     python -m app.ai.cv_counting OUT
+    python -m app.ai.cv_counting PO
 
 Press 'q' to quit the webcam session.
 """
@@ -23,6 +24,7 @@ import cv2
 # ---------------------------------------------------------------------------
 API_BASE_URL = "http://localhost:8000"
 STOCK_ENDPOINT = f"{API_BASE_URL}/stock/scan"   # SKU-based endpoint
+PO_ENDPOINT = f"{API_BASE_URL}/purchase-orders/scan-session" # PO Receiving endpoint
 AUTH_TOKEN = ""                                  # Set via login, or leave blank for dev
 COOLDOWN_SECONDS = 2                             # Per-SKU scan cooldown
 
@@ -42,15 +44,23 @@ def _post_transaction(sku: str, mode: str):
     if AUTH_TOKEN:
         headers["Authorization"] = f"Bearer {AUTH_TOKEN}"
 
-    payload = {
-        "sku": sku,
-        "quantity": 1,
-        "type": mode,
-        "source": "Auto via CV",
-    }
+    if mode == "PO":
+        target_url = PO_ENDPOINT
+        payload = {
+            "sku": sku,
+            "quantity": 1
+        }
+    else:
+        target_url = STOCK_ENDPOINT
+        payload = {
+            "sku": sku,
+            "quantity": 1,
+            "type": mode,
+            "source": "Auto via CV",
+        }
 
     try:
-        resp = requests.post(STOCK_ENDPOINT, json=payload, headers=headers, timeout=5)
+        resp = requests.post(target_url, json=payload, headers=headers, timeout=5)
         if resp.status_code == 200:
             with scan_lock:
                 total_scanned += 1
@@ -66,8 +76,8 @@ def run(mode: str):
     global total_scanned
 
     mode = mode.upper()
-    if mode not in ("IN", "OUT"):
-        print("Error: mode must be IN or OUT")
+    if mode not in ("IN", "OUT", "PO"):
+        print("Error: mode must be IN, OUT, or PO")
         sys.exit(1)
 
     cap = cv2.VideoCapture(0)
@@ -135,6 +145,6 @@ def run(mode: str):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python -m app.ai.cv_counting <IN|OUT>")
+        print("Usage: python -m app.ai.cv_counting <IN|OUT|PO>")
         sys.exit(1)
     run(sys.argv[1])

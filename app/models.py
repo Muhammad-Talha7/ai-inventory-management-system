@@ -118,6 +118,7 @@ class PurchaseOrders(Base):
     __tablename__ = "purchase_orders"
 
     order_id = Column(Integer, primary_key=True, autoincrement=True)
+    supplier_id = Column(String(10), ForeignKey("suppliers.supplier_id"), nullable=True)
     status = Column(String(50), default="Scheduled")
     created_at = Column(DateTime, default=func.now())
     approved_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)

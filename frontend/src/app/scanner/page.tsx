@@ -1,187 +1,198 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { apiFetch } from '@/lib/api';
 import {
-  Camera,
-  RefreshCw,
-  Box,
-  AlertCircle,
-  CheckCircle2,
-  Sparkles,
-  Activity,
-  ArrowRight,
-  History,
-  Scan,
-  Maximize2
+  Activity, CheckCircle2, AlertCircle, RefreshCw, Box, Search, Save, PackageCheck
 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+
+interface POScanItem {
+  sku: str;
+  quantity: int;
+}
+
+interface PurchaseOrder {
+  order_id: number;
+  status: string;
+  items: any[];
+}
 
 export default function ScannerPage() {
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanMode, setScanMode] = useState<'IN' | 'OUT'>('IN');
-  const [lastScan, setLastScan] = useState<string | null>(null);
-  const [scannedItems, setScannedItems] = useState<{sku: string, quantity: number, type: string}[]>([]);
-  const [scanMessage, setScanMessage] = useState<string>('');
-  const [scanError, setScanError] = useState<string>('');
-  const [totalScanned, setTotalScanned] = useState(0);
+  const searchParams = useSearchParams();
+  const initialMode = searchParams.get('mode') as any || 'PO';
+  const [scanMode, setScanMode] = useState<'IN' | 'OUT' | 'PO'>(initialMode);
+  
+  // PO Session State
+  const [poScans, setPoScans] = useState<any[]>([]);
+  const [poTotal, setPoTotal] = useState(0);
+  const [isPolling, setIsPolling] = useState(false);
+  
+  // Matching State
+  const [matchedPo, setMatchedPo] = useState<PurchaseOrder | null>(null);
+  const [matchingError, setMatchingError] = useState('');
+  const [receiveNotes, setReceiveNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const scannerRef = useRef<any>(null);
-
-  // Ref to keep track of the last scanned SKU and time to prevent rapid duplicate scans
-  const cooldownRef = useRef<{ sku: string, time: number } | null>(null);
-
-  // We use a ref to safely load Html5Qrcode on the client side
-  const Html5QrcodeRef = useRef<any>(null);
-
+  
   useEffect(() => {
-    // Dynamically import on client side to avoid SSR issues with window/navigator
-    import('html5-qrcode').then((module) => {
-      Html5QrcodeRef.current = module.Html5Qrcode;
-    }).catch(err => console.error("Failed to load html5-qrcode", err));
-
-    return () => {
-      if (scannerRef.current && isScanning) {
-        scannerRef.current.stop().then(() => scannerRef.current?.clear()).catch(console.error);
-      }
-    };
-  }, [isScanning]);
-
-  const startScanner = async () => {
-    if (!Html5QrcodeRef.current) return;
-
-    try {
-      setScanError('');
-      const Html5Qrcode = Html5QrcodeRef.current;
-      const html5QrCode = new Html5Qrcode("reader");
-      scannerRef.current = html5QrCode;
-
-      await html5QrCode.start(
-        { facingMode: "environment" },
-        {
-          fps: 15,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0
-        },
-        async (decodedText: string) => {
-          // Handle scan success
-          const now = Date.now();
-          const cooldown = cooldownRef.current;
-
-          const formattedSku = decodedText.startsWith('SKU-') ? decodedText : `SKU-${decodedText}`;
-
-          if (cooldown && cooldown.sku === formattedSku && (now - cooldown.time) < 3000) {
-            return; // Ignore if scanned same SKU within 3 seconds
+    let interval: any;
+    if (scanMode === 'PO' && isPolling) {
+      interval = setInterval(async () => {
+        try {
+          const res = await apiFetch('/purchase-orders/scan-session');
+          if (res.success) {
+            setPoScans(res.data);
+            setPoTotal(res.total);
           }
+        } catch (err) {}
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [scanMode, isPolling]);
 
-          cooldownRef.current = { sku: formattedSku, time: now };
-          setLastScan(formattedSku);
-          
-          setScannedItems(prev => {
-            const existing = prev.find(item => item.sku === formattedSku && item.type === scanMode);
-            if (existing) {
-              return prev.map(item => 
-                item.sku === formattedSku && item.type === scanMode 
-                  ? { ...item, quantity: item.quantity + 1 } 
-                  : item
-              );
-            }
-            return [...prev, { sku: formattedSku, quantity: 1, type: scanMode }];
-          });
-          
-          setTotalScanned(prev => prev + 1);
-          setScanMessage(`Detected ${formattedSku} (${scanMode})`);
-          setScanError('');
-
-        },
-        () => {
-          // ignore background scanning errors
-        }
-      );
-      setIsScanning(true);
-    } catch (err) {
-      console.error(err);
-      setScanError("Failed to start camera. Please ensure you have granted camera permissions.");
+  const togglePolling = () => {
+    setIsPolling(!isPolling);
+    if (!isPolling && scanMode === 'PO') {
+      setMatchedPo(null);
+      setMatchingError('');
+      setReceiveNotes('');
     }
   };
 
-  const stopScanner = async () => {
-    if (scannerRef.current && isScanning) {
-      try {
-        await scannerRef.current.stop();
-        scannerRef.current.clear();
-        setIsScanning(false);
-      } catch (err) {
-        console.error("Failed to stop scanner", err);
+  const clearSession = async () => {
+    try {
+      await apiFetch('/purchase-orders/scan-session', { method: 'DELETE' });
+      setPoScans([]);
+      setPoTotal(0);
+      setMatchedPo(null);
+      setMatchingError('');
+    } catch(err) {}
+  };
+
+  const handleMatchPO = async () => {
+    try {
+      setIsPolling(false);
+      setMatchingError('');
+      
+      const res = await apiFetch('/purchase-orders?page=1');
+      if (!res.success) return;
+      
+      const scheduledPOs = res.data.filter((o: any) => o.status === 'Scheduled');
+      if (scheduledPOs.length === 0) {
+        setMatchingError("No Scheduled Purchase Orders found.");
+        return;
+      }
+      
+      // Match algorithm: Count overlapping products
+      let bestMatch = null;
+      let maxOverlap = -1;
+      
+      for (const po of scheduledPOs) {
+        let overlap = 0;
+        for (const item of po.items) {
+          const scanned = poScans.find(s => s.sku === item.sku);
+          if (scanned) {
+            overlap += Math.min(scanned.quantity, item.order_quantity); // Simple overlap score
+          }
+        }
+        if (overlap > maxOverlap) {
+          maxOverlap = overlap;
+          bestMatch = po;
+        }
+      }
+      
+      if (maxOverlap > 0 && bestMatch) {
+        setMatchedPo(bestMatch);
+      } else {
+        setMatchingError("Could not find a PO matching the scanned items.");
+      }
+    } catch(err: any) {
+      setMatchingError(err.message || 'Error matching PO');
+    }
+  };
+
+  const handleSubmitReceive = async () => {
+    if (!matchedPo) return;
+    
+    // Check if discrepancies exist
+    let hasDiscrepancy = false;
+    for (const item of matchedPo.items) {
+      const scanned = poScans.find(s => s.sku === item.sku);
+      const sq = scanned ? scanned.quantity : 0;
+      if (sq !== item.order_quantity) {
+        hasDiscrepancy = true;
       }
     }
-  };
-
-  const submitBulkScans = async () => {
-    if (scannedItems.length === 0) return;
-    setIsSubmitting(true);
-    setScanError('');
-    setScanMessage('');
     
+    if (hasDiscrepancy && !receiveNotes.trim()) {
+      setMatchingError("There is a discrepancy. You must enter a Receiving Note/Reason.");
+      return;
+    }
+    
+    setIsSubmitting(true);
+    setMatchingError('');
     try {
-      const res = await apiFetch('/stock/scan/bulk', {
+      const payloadItems = matchedPo.items.map((item: any) => {
+        const scanned = poScans.find(s => s.sku === item.sku);
+        return {
+          id: item.id,
+          received_quantity: scanned ? scanned.quantity : 0
+        };
+      });
+      
+      const res = await apiFetch(`/purchase-orders/${matchedPo.order_id}/receive`, {
         method: 'POST',
         body: JSON.stringify({
-          scans: scannedItems.map(item => ({
-            sku: item.sku,
-            quantity: item.quantity,
-            type: item.type,
-            source: "CV Scanner Bulk"
-          }))
+          items: payloadItems,
+          receiving_notes: receiveNotes
         })
       });
       
       if (res.success) {
-        setScanMessage(`Successfully submitted ${res.data?.processed_count || scannedItems.length} scans for approval.`);
-        setScannedItems([]);
-        setLastScan(null);
+        await clearSession();
+        window.location.href = '/purchase-orders';
       }
     } catch (err: any) {
-      setScanError(err.message || 'Failed to submit scans.');
-    } finally {
+      setMatchingError(err.message || 'Failed to submit receive.');
       setIsSubmitting(false);
     }
   };
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 py-8 space-y-8">
-      {/* Header Section */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 rounded-full text-indigo-600 font-black text-[10px] uppercase tracking-widest">
-            <Scan size={12} />
-            CV Recognition Engine
+            <ScanIcon /> CV Recognition Engine
           </div>
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Computer Vision Scanner</h1>
           <p className="text-slate-500 font-medium max-w-xl">
-            Real-time <span className="text-indigo-600 font-bold">QR recognition</span> for instant stock updates. Scan product SKUs to process rapid movements.
+            Live integration with the external Python CV module.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
             <button
-              onClick={() => setScanMode('IN')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${scanMode === 'IN'
-                  ? 'bg-white text-emerald-600 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-                }`}
+              onClick={() => setScanMode('PO')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${scanMode === 'PO' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              <Activity size={14} className={scanMode === 'IN' ? 'animate-pulse' : ''} />
+              <PackageCheck size={14} />
+              Receive PO
+            </button>
+            <button
+              onClick={() => setScanMode('IN')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${scanMode === 'IN' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              <Activity size={14} />
               Stock In
             </button>
             <button
               onClick={() => setScanMode('OUT')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${scanMode === 'OUT'
-                  ? 'bg-white text-rose-600 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-                }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${scanMode === 'OUT' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              <Activity size={14} className={scanMode === 'OUT' ? 'animate-pulse' : ''} />
+              <Activity size={14} />
               Stock Out
             </button>
           </div>
@@ -189,198 +200,150 @@ export default function ScannerPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Scanner Section */}
+        {/* Main Section */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white border border-slate-200 rounded-[32px] p-2 shadow-sm shadow-slate-100 relative overflow-hidden group">
-            <div className="relative bg-slate-900 rounded-[24px] overflow-hidden min-h-[500px] flex items-center justify-center">
-              {/* Camera Container */}
-              <div id="reader" className="w-full h-full max-w-lg aspect-square"></div>
-
-              {!isScanning && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-sm z-10 text-white p-8 text-center">
-                  <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6 border border-indigo-500/20">
-                    <Camera className="w-10 h-10 text-indigo-400" />
-                  </div>
-                  <h3 className="text-2xl font-black mb-2">Scanner Ready</h3>
-                  <p className="text-slate-400 text-sm max-w-xs mb-8">
-                    Grant camera permissions to start scanning product QR codes and barcodes.
-                  </p>
-                  <button
-                    onClick={startScanner}
-                    className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-xl shadow-indigo-500/20 active:scale-95"
-                  >
-                    Initialize Camera
+          <div className="bg-slate-900 border border-slate-800 rounded-[32px] p-12 shadow-sm text-center relative overflow-hidden flex flex-col items-center justify-center min-h-[400px]">
+            {isPolling ? (
+              <>
+                <div className="absolute inset-0 bg-indigo-500/5 animate-pulse"></div>
+                <RefreshCw size={48} className="text-indigo-400 animate-spin mb-6" />
+                <h2 className="text-2xl font-black text-white mb-2">Listening to CV Module...</h2>
+                <p className="text-slate-400">Run <code className="bg-slate-800 px-2 py-1 rounded text-indigo-300">python -m app.ai.cv_counting {scanMode}</code></p>
+                <button onClick={togglePolling} className="mt-8 px-6 py-2 bg-rose-500/20 text-rose-400 rounded-xl font-bold hover:bg-rose-500/30 transition">
+                  Stop Listening
+                </button>
+              </>
+            ) : (
+              <>
+                <Box size={48} className="text-slate-600 mb-6" />
+                <h2 className="text-2xl font-black text-white mb-2">CV Connection Offline</h2>
+                <button onClick={togglePolling} className="mt-8 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black shadow-lg shadow-indigo-500/20 transition uppercase tracking-widest text-xs">
+                  Connect to CV Feed
+                </button>
+                {scanMode === 'PO' && poTotal > 0 && !matchedPo && (
+                  <button onClick={handleMatchPO} className="mt-4 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black shadow-lg shadow-emerald-500/20 transition uppercase tracking-widest text-xs flex items-center gap-2">
+                    <Search size={14} /> Match Scans to PO
                   </button>
-                </div>
-              )}
-
-              {isScanning && (
-                <div className="absolute top-6 left-6 right-6 flex justify-between items-center z-10">
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 text-white text-[10px] font-black uppercase tracking-widest">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Live Feed
-                  </div>
-                  <button
-                    onClick={stopScanner}
-                    className="p-2 bg-black/40 backdrop-blur-md rounded-full border border-white/10 text-white hover:bg-rose-500/20 hover:text-rose-400 transition-all"
-                  >
-                    <RefreshCw size={18} />
-                  </button>
-                </div>
-              )}
-
-              {/* Scanning Crosshair Overlay */}
-              {isScanning && (
-                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                  <div className="w-64 h-64 border-2 border-indigo-500/30 rounded-3xl relative">
-                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-indigo-500 rounded-tl-xl"></div>
-                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-indigo-500 rounded-tr-xl"></div>
-                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-indigo-500 rounded-bl-xl"></div>
-                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-indigo-500 rounded-br-xl"></div>
-                    <div className="absolute inset-0 bg-indigo-500/5 animate-pulse"></div>
-                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-indigo-500/40 animate-scan"></div>
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
+              </>
+            )}
           </div>
 
-          {/* Quick Instructions / Features */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center text-center gap-3">
-              <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
-                <Box size={20} />
+          {matchedPo && scanMode === 'PO' && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+              <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+                <PackageCheck size={20} className="text-indigo-600" />
+                Matched Purchase Order #{matchedPo.order_id}
+              </h3>
+              
+              <div className="overflow-x-auto mb-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-y border-slate-100 text-slate-500 uppercase text-[10px] tracking-widest font-black text-left">
+                      <th className="py-3 px-4">Product</th>
+                      <th className="py-3 px-4 text-center">Expected</th>
+                      <th className="py-3 px-4 text-center">Scanned</th>
+                      <th className="py-3 px-4 text-center">Diff</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matchedPo.items.map((item: any) => {
+                      const scanned = poScans.find(s => s.sku === item.sku);
+                      const scannedQty = scanned ? scanned.quantity : 0;
+                      const diff = scannedQty - item.order_quantity;
+                      return (
+                        <tr key={item.id} className="border-b border-slate-50">
+                          <td className="py-3 px-4 font-bold text-slate-700">{item.product_name} <span className="text-[10px] text-slate-400 block font-normal">{item.sku}</span></td>
+                          <td className="py-3 px-4 text-center text-slate-600 font-medium">{item.order_quantity}</td>
+                          <td className="py-3 px-4 text-center text-indigo-600 font-bold">{scannedQty}</td>
+                          <td className="py-3 px-4 text-center">
+                            {diff === 0 ? (
+                              <span className="text-emerald-500 font-black">OK</span>
+                            ) : (
+                              <span className={diff > 0 ? "text-amber-500 font-black" : "text-rose-500 font-black"}>{diff > 0 ? `+${diff}` : diff}</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Instant Lookup</p>
-              <p className="text-xs text-slate-500 font-medium">Auto-identifies product details upon detection</p>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center text-center gap-3">
-              <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-                <Sparkles size={20} />
+
+              {matchedPo.items.some((item: any) => {
+                const scanned = poScans.find(s => s.sku === item.sku);
+                const sq = scanned ? scanned.quantity : 0;
+                return sq !== item.order_quantity;
+              }) && (
+                <div className="mb-4 bg-rose-50 border border-rose-100 p-4 rounded-xl">
+                  <label className="block text-xs font-black text-rose-700 uppercase tracking-widest mb-2 flex items-center gap-1"><AlertCircle size={14} /> Discrepancy Reason Required</label>
+                  <textarea 
+                    className="w-full bg-white border border-rose-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                    placeholder="Enter reason for shortage/overage..."
+                    rows={2}
+                    value={receiveNotes}
+                    onChange={(e) => setReceiveNotes(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {matchingError && (
+                 <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-2">
+                   <AlertCircle size={16} className="text-rose-600" />
+                   <p className="text-xs text-rose-700 font-medium leading-relaxed">{matchingError}</p>
+                 </div>
+              )}
+
+              <div className="flex gap-4">
+                <button onClick={() => setMatchedPo(null)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">Cancel</button>
+                <button onClick={handleSubmitReceive} disabled={isSubmitting} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-md hover:bg-indigo-700 disabled:opacity-50">
+                  {isSubmitting ? 'Submitting...' : 'Confirm Receipt'}
+                </button>
               </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Smart Cooldown</p>
-              <p className="text-xs text-slate-500 font-medium">Prevents double-counting with 3s scan buffer</p>
             </div>
-            <div className="bg-white border border-slate-200 rounded-3xl p-5 flex flex-col items-center text-center gap-3">
-              <div className="w-10 h-10 bg-violet-50 text-violet-600 rounded-xl flex items-center justify-center">
-                <Activity size={20} />
-              </div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Real-time Sync</p>
-              <p className="text-xs text-slate-500 font-medium">Updates inventory levels immediately across system</p>
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Sidebar: Session Details & Last Scan */}
+        {/* Sidebar */}
         <div className="space-y-6">
           <div className="bg-slate-900 rounded-[32px] p-8 text-white space-y-8 shadow-2xl relative overflow-hidden">
-            <Activity className="absolute -right-4 -top-4 w-24 h-24 text-indigo-500/10" />
-
             <div>
-              <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-2">Live Session Status</p>
+              <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-2">Live Session Tally</p>
               <div className="flex items-end justify-between">
-                <h2 className="text-5xl font-black">{totalScanned}</h2>
-                <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${scanMode === 'IN' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                  }`}>
+                <h2 className="text-5xl font-black">{scanMode === 'PO' ? poTotal : '--'}</h2>
+                <div className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-indigo-500/20 text-indigo-400">
                   {scanMode} MODE
                 </div>
               </div>
-              <p className="text-slate-400 text-xs font-medium mt-2">Total items processed this session</p>
             </div>
 
-            <div className="space-y-4 pt-8 border-t border-white/10">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-300 flex items-center gap-2">
-                <History size={16} />
-                Scanned Items
-              </h3>
-
-              {scannedItems.length > 0 ? (
-                <div className="bg-white/5 rounded-2xl p-4 border border-white/10 animate-in fade-in slide-in-from-bottom-2">
-                  <div className="space-y-2 max-h-48 overflow-y-auto mb-4">
-                    {scannedItems.map((item, idx) => (
+            {scanMode === 'PO' && poScans.length > 0 && (
+              <div className="space-y-4 pt-8 border-t border-white/10">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-300">Scanned SKUs</h3>
+                  <button onClick={clearSession} className="text-xs text-rose-400 hover:text-rose-300 underline">Clear</button>
+                </div>
+                <div className="bg-white/5 rounded-2xl p-4 border border-white/10 max-h-64 overflow-y-auto">
+                  <div className="space-y-2">
+                    {poScans.map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center text-xs">
-                        <span className="font-bold">{item.sku}</span>
-                        <span className={`px-2 py-0.5 rounded border ${item.type === 'IN' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
-                          {item.type} x{item.quantity}
+                        <span className="font-bold text-slate-300">{item.sku}</span>
+                        <span className="px-2 py-0.5 rounded border bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
+                          Qty: {item.quantity}
                         </span>
                       </div>
                     ))}
                   </div>
-                  
-                  {scanMessage && (
-                    <div className="mb-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2">
-                      <CheckCircle2 size={16} className="text-emerald-400" />
-                      <p className="text-xs text-emerald-300 font-medium leading-relaxed">{scanMessage}</p>
-                    </div>
-                  )}
-
-                  {scanError && (
-                    <div className="mb-3 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-2">
-                      <AlertCircle size={16} className="text-rose-400" />
-                      <p className="text-xs text-rose-300 font-medium leading-relaxed">{scanError}</p>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={submitBulkScans}
-                    disabled={isSubmitting}
-                    className="w-full flex items-center justify-center gap-2 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
-                  >
-                    {isSubmitting ? 'Submitting...' : `Submit ${scannedItems.length} Items`}
-                    {!isSubmitting && <ArrowRight size={14} />}
-                  </button>
                 </div>
-              ) : (
-                <div className="bg-white/5 rounded-2xl p-6 border border-white/10 flex flex-col items-center text-center">
-                  <Scan size={32} className="text-white/20 mb-3" />
-                  <p className="text-sm text-slate-400 font-medium">No items scanned yet.</p>
-                  
-                  {scanMessage && (
-                    <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2">
-                      <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-                      <p className="text-xs text-emerald-300 font-medium leading-relaxed">{scanMessage}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="pt-4 mt-auto">
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center mb-4">
-                Powered by AI Vision
               </div>
-            </div>
-          </div>
-
-          {/* System Requirements / Tips */}
-          <div className="bg-white border border-slate-200 rounded-[32px] p-6 space-y-4">
-            <h3 className="font-black text-slate-900 uppercase text-xs tracking-[0.2em]">Scanner Tips</h3>
-            <ul className="space-y-3">
-              {[
-                "Center the QR code within the guide",
-                "Ensure adequate room lighting",
-                "Keep the camera lens clean",
-                "Works best with High-Contrast labels"
-              ].map((tip, i) => (
-                <li key={i} className="flex items-center gap-3 text-xs text-slate-500 font-medium">
-                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                  {tip}
-                </li>
-              ))}
-            </ul>
+            )}
           </div>
         </div>
       </div>
-
-      <style jsx global>{`
-        @keyframes scan {
-          0%, 100% { top: 0; }
-          50% { top: 100%; }
-        }
-        .animate-scan {
-          animation: scan 2s linear infinite;
-        }
-      `}</style>
     </div>
   );
+}
+
+function ScanIcon() {
+  return <Activity size={12} />;
 }

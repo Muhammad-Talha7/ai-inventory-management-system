@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_db, require_role
-from app.models import Inventory, PurchaseOrders, PurchaseOrderItems, Users
+from app.models import Inventory, PurchaseOrders, PurchaseOrderItems, Users, Products
 from sqlalchemy import func
 from app.ai.forecasting import bulk_forecast_demand
 from app.core.audit import log_audit
@@ -17,7 +17,7 @@ def run_weekly_forecast(
     db: Session = Depends(get_db),
     # Require authentication if needed, but the prompt didn't specify. 
     # I'll include it because other endpoints use it.
-    current_user: Users = Depends(require_role("manager", "admin"))
+    current_user: Users = Depends(require_role("manager"))
 ):
     """
     Run weekly forecast using the pre-trained ML model.
@@ -48,18 +48,23 @@ def run_weekly_forecast(
                 Inventory.product_id,
                 Inventory.current_stock,
                 Inventory.min_stock,
-                func.coalesce(incoming_subq.c.incoming_stock, 0).label("incoming_stock")
+                func.coalesce(incoming_subq.c.incoming_stock, 0).label("incoming_stock"),
+                Products.supplier_id
             )
+            .join(Products, Inventory.product_id == Products.product_id)
             .outerjoin(incoming_subq, Inventory.product_id == incoming_subq.c.product_id)
             .all()
         )
         
-        items_to_order = []
+        from collections import defaultdict
+        items_by_supplier = defaultdict(list)
+        
         for inv in inventory_records:
             pid = inv.product_id
             current_stock = inv.current_stock
             incoming_stock = inv.incoming_stock
             min_stock = inv.min_stock
+            supplier_id = inv.supplier_id
             
             predicted_demand = demand_by_product.get(pid, 0)
             
@@ -74,32 +79,33 @@ def run_weekly_forecast(
             order_qty = math.ceil(shortfall)
             
             if order_qty > 0:
-                items_to_order.append({"product_id": pid, "order_qty": order_qty})
+                items_by_supplier[supplier_id].append({"product_id": pid, "order_qty": order_qty})
         
         orders_scheduled = 0
-        if items_to_order:
-            new_order = PurchaseOrders(status='Scheduled')
-            db.add(new_order)
-            db.flush()
-            
-            for item in items_to_order:
-                po_item = PurchaseOrderItems(
-                    order_id=new_order.order_id,
-                    product_id=item["product_id"],
-                    order_quantity=item["order_qty"]
-                )
-                db.add(po_item)
+        if items_by_supplier:
+            for supplier_id, items in items_by_supplier.items():
+                new_order = PurchaseOrders(status='Scheduled', supplier_id=supplier_id)
+                db.add(new_order)
+                db.flush()
                 
-            orders_scheduled = 1
-            
-            log_audit(
-                db=db,
-                user_id=current_user.user_id,
-                action="create_ai_order",
-                entity_type="purchase_order",
-                entity_id=new_order.order_id,
-                new_values={"item_count": len(items_to_order)}
-            )
+                for item in items:
+                    po_item = PurchaseOrderItems(
+                        order_id=new_order.order_id,
+                        product_id=item["product_id"],
+                        order_quantity=item["order_qty"]
+                    )
+                    db.add(po_item)
+                    
+                orders_scheduled += 1
+                
+                log_audit(
+                    db=db,
+                    user_id=current_user.user_id,
+                    action="create_ai_order",
+                    entity_type="purchase_order",
+                    entity_id=new_order.order_id,
+                    new_values={"item_count": len(items), "supplier_id": supplier_id}
+                )
         
         # Commit to the database
         db.commit()

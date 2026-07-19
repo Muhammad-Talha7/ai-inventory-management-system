@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ClipboardList, CheckCircle2, Clock, Calendar, RefreshCw, XCircle, Plus, AlertCircle, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ClipboardList, CheckCircle2, Clock, Calendar, RefreshCw, XCircle, Plus, AlertCircle, ChevronDown, ChevronRight, Trash2, Scan } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
@@ -67,6 +67,7 @@ interface PurchaseOrder {
   approved_by?: number;
   rejected_by?: number;
   receiving_notes?: string;
+  supplier_id?: string;
   items: PurchaseOrderItem[];
 }
 
@@ -85,9 +86,16 @@ export default function PurchaseOrdersPage() {
   // Manual Order State
   const [showManualModal, setShowManualModal] = useState(false);
   const [products, setProducts] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState('');
   const [manualItems, setManualItems] = useState<{product_id: string, quantity: number, tempId: number}[]>([]);
   const [creating, setCreating] = useState(false);
   const [nextTempId, setNextTempId] = useState(1);
+
+  // Edit Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<PurchaseOrder | null>(null);
+  const [editing, setEditing] = useState(false);
 
   // Receive Modal State
   const [showReceiveModal, setShowReceiveModal] = useState(false);
@@ -124,6 +132,20 @@ export default function PurchaseOrdersPage() {
   useEffect(() => {
     fetchOrders();
   }, [page]);
+
+  useEffect(() => {
+    const fetchDeps = async () => {
+      try {
+        const [suppRes, prodRes] = await Promise.all([
+          apiFetch('/suppliers/'),
+          apiFetch('/products?limit=1000')
+        ]);
+        if (Array.isArray(suppRes)) setSuppliers(suppRes);
+        if (prodRes.success) setProducts(prodRes.data);
+      } catch (err: any) {}
+    };
+    fetchDeps();
+  }, []);
 
   const toggleExpand = (orderId: number) => {
     const newExpanded = new Set(expandedOrders);
@@ -227,25 +249,65 @@ export default function PurchaseOrdersPage() {
     }
   };
 
-  const handleOpenManualModal = async () => {
+  const handleOpenManualModal = () => {
     setShowManualModal(true);
     setManualItems([]);
+    setSelectedSupplierId('');
+  };
+
+  const handleOpenEditModal = (order: PurchaseOrder) => {
+    setEditingOrder(order);
+    setSelectedSupplierId(order.supplier_id || '');
+    setManualItems(order.items.map((item, index) => ({
+      product_id: item.product_id,
+      quantity: item.order_quantity,
+      tempId: index
+    })));
+    setNextTempId(order.items.length);
+    setShowEditModal(true);
+  };
+
+  const handleUpdateItems = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOrder || manualItems.length === 0) return;
+    
     try {
-      const res = await apiFetch('/products?limit=1000');
+      setEditing(true);
+      const payloadItems = manualItems.map(item => ({
+        product_id: item.product_id,
+        order_quantity: item.quantity
+      }));
+      
+      const res = await apiFetch(`/purchase-orders/${editingOrder.order_id}/items`, {
+        method: 'PATCH',
+        body: JSON.stringify({ items: payloadItems })
+      });
+      
       if (res.success) {
-        setProducts(res.data);
-        if (res.data.length > 0) {
-          setManualItems([{product_id: res.data[0].product_id, quantity: 1, tempId: 0}]);
-        }
+        setShowEditModal(false);
+        fetchOrders();
       }
     } catch (err: any) {
-      console.error(err);
+      alert(err.message || 'Failed to update order items');
+    } finally {
+      setEditing(false);
     }
   };
   
+  const handleSupplierChange = (suppId: string) => {
+    setSelectedSupplierId(suppId);
+    setManualItems([]);
+    const suppProducts = products.filter(p => p.supplier_id === suppId);
+    if (suppProducts.length > 0) {
+      setManualItems([{product_id: suppProducts[0].product_id, quantity: 1, tempId: nextTempId}]);
+      setNextTempId(nextTempId + 1);
+    }
+  };
+
   const addManualItem = () => {
-    if (products.length > 0) {
-      setManualItems([...manualItems, {product_id: products[0].product_id, quantity: 1, tempId: nextTempId}]);
+    const suppProducts = products.filter(p => p.supplier_id === selectedSupplierId);
+    if (suppProducts.length > 0) {
+      setManualItems([...manualItems, {product_id: suppProducts[0].product_id, quantity: 1, tempId: nextTempId}]);
       setNextTempId(nextTempId + 1);
     }
   };
@@ -274,6 +336,7 @@ export default function PurchaseOrdersPage() {
       const res = await apiFetch('/purchase-orders/manual', {
         method: 'POST',
         body: JSON.stringify({
+          supplier_id: selectedSupplierId,
           items: payloadItems
         })
       });
@@ -345,6 +408,15 @@ export default function PurchaseOrdersPage() {
               Manual Order
             </button>
           )}
+          {user?.role === 'staff' && (
+            <button
+              onClick={() => window.location.href = '/scanner?mode=PO'}
+              className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-2xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+            >
+              <Scan size={16} />
+              Scan Delivery
+            </button>
+          )}
         </div>
       </div>
 
@@ -382,6 +454,9 @@ export default function PurchaseOrdersPage() {
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Order ID</span>
                   </th>
                   <th className="text-left px-6 py-4">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Supplier</span>
+                  </th>
+                  <th className="text-left px-6 py-4">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Items</span>
                   </th>
                   <th className="text-center px-6 py-4">
@@ -414,8 +489,8 @@ export default function PurchaseOrdersPage() {
                   </tr>
                 ) : (
                   orders.map((o) => (
-                    <>
-                      <tr key={`po-${o.order_id}`} className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                    <React.Fragment key={`po-${o.order_id}`}>
+                      <tr className="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
                         <td className="px-4 py-5 text-center">
                           <button onClick={() => toggleExpand(o.order_id)} className="p-1 text-slate-400 hover:text-slate-600 rounded">
                             {expandedOrders.has(o.order_id) ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -423,6 +498,11 @@ export default function PurchaseOrdersPage() {
                         </td>
                         <td className="px-6 py-5 font-bold text-slate-900 text-sm">
                           #{o.order_id}
+                        </td>
+                        <td className="px-6 py-5">
+                          <p className="font-bold text-slate-900 text-sm">
+                            {suppliers.find(s => s.supplier_id === o.supplier_id)?.name || o.supplier_id || 'Unknown'}
+                          </p>
                         </td>
                         <td className="px-6 py-5">
                           <p className="font-bold text-slate-900 text-sm">{o.items.length} Product(s)</p>
@@ -456,13 +536,9 @@ export default function PurchaseOrdersPage() {
                         <td className="px-6 py-5 text-right">
                           <div className="flex items-center justify-end gap-2">
                             {o.status === 'Scheduled' && user?.role === 'staff' && (
-                              <button
-                                onClick={() => handleOpenReceiveModal(o)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all shadow-sm"
-                              >
-                                <CheckCircle2 size={14} />
-                                Receive
-                              </button>
+                              <span className="px-3 py-1.5 bg-slate-50 text-slate-400 rounded-xl text-xs font-bold border border-slate-100">
+                                Awaiting Delivery
+                              </span>
                             )}
                             {o.status === 'Pending Approval' && user?.role === 'manager' && (
                               <button
@@ -483,13 +559,22 @@ export default function PurchaseOrdersPage() {
                               </button>
                             )}
                             {(o.status === 'Scheduled' || o.status === 'Pending Approval') && user?.role === 'manager' && (
-                              <button
-                                onClick={() => handleCancelOrder(o.order_id)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all shadow-sm"
-                              >
-                                <XCircle size={14} />
-                                Cancel
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleOpenEditModal(o)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-all shadow-sm"
+                                >
+                                  <RefreshCw size={14} />
+                                  Edit Items
+                                </button>
+                                <button
+                                  onClick={() => handleCancelOrder(o.order_id)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all shadow-sm"
+                                >
+                                  <XCircle size={14} />
+                                  Cancel
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -525,7 +610,7 @@ export default function PurchaseOrdersPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
@@ -546,49 +631,67 @@ export default function PurchaseOrdersPage() {
             </div>
             
             <div className="p-6 overflow-y-auto space-y-4 grow">
-              <div className="space-y-3">
-                <div className="flex text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
-                  <div className="flex-1">Product</div>
-                  <div className="w-24 text-center">Quantity</div>
-                  <div className="w-10"></div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Supplier</label>
+                  <select
+                    value={selectedSupplierId}
+                    onChange={(e) => handleSupplierChange(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium text-slate-700"
+                  >
+                    <option value="">Select a Supplier</option>
+                    {suppliers.map(s => (
+                      <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>
+                    ))}
+                  </select>
                 </div>
                 
-                {manualItems.map((item, index) => (
-                  <div key={item.tempId} className="flex gap-3 items-center bg-slate-50 p-2 rounded-xl border border-slate-100">
-                    <ProductSearchSelect 
-                      value={item.product_id}
-                      onChange={(val) => updateManualItem(item.tempId, 'product_id', val)}
-                      products={products}
-                    />
+                {selectedSupplierId && (
+                  <div className="space-y-3">
+                    <div className="flex text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+                      <div className="flex-1">Product</div>
+                      <div className="w-24 text-center">Quantity</div>
+                      <div className="w-10"></div>
+                    </div>
                     
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      value={item.quantity}
-                      onChange={e => updateManualItem(item.tempId, 'quantity', parseInt(e.target.value) || 0)}
-                      className="w-24 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-bold text-slate-900 text-center text-sm"
-                    />
+                    {manualItems.map((item, index) => (
+                      <div key={item.tempId} className="flex gap-3 items-center bg-slate-50 p-2 rounded-xl border border-slate-100">
+                        <ProductSearchSelect 
+                          value={item.product_id}
+                          onChange={(val) => updateManualItem(item.tempId, 'product_id', val)}
+                          products={products.filter(p => p.supplier_id === selectedSupplierId)}
+                        />
                     
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          value={item.quantity}
+                          onChange={e => updateManualItem(item.tempId, 'quantity', parseInt(e.target.value) || 0)}
+                          className="w-24 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-bold text-slate-900 text-center text-sm"
+                        />
+                    
+                        <button 
+                          type="button" 
+                          onClick={() => removeManualItem(item.tempId)}
+                          disabled={manualItems.length === 1}
+                          className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+
                     <button 
-                      type="button" 
-                      onClick={() => removeManualItem(item.tempId)}
-                      disabled={manualItems.length === 1}
-                      className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                      type="button"
+                      onClick={addManualItem}
+                      className="w-full py-3 mt-2 border-2 border-dashed border-slate-200 text-slate-500 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors flex items-center justify-center gap-2 text-sm"
                     >
-                      <Trash2 size={16} />
+                      <Plus size={16} /> Add Another Product
                     </button>
                   </div>
-                ))}
+                )}
               </div>
-              
-              <button 
-                type="button"
-                onClick={addManualItem}
-                className="w-full py-3 mt-2 border-2 border-dashed border-slate-200 text-slate-500 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors flex items-center justify-center gap-2 text-sm"
-              >
-                <Plus size={16} /> Add Another Product
-              </button>
             </div>
             
             <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
@@ -726,6 +829,84 @@ export default function PurchaseOrdersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Edit Items Modal */}
+      {showEditModal && editingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <h2 className="text-xl font-black text-slate-900">Edit Items for Order #{editingOrder.order_id}</h2>
+              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">
+                <XCircle size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-4 grow">
+              <div className="space-y-3">
+                <div className="flex text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+                  <div className="flex-1">Product</div>
+                  <div className="w-24 text-center">Quantity</div>
+                  <div className="w-10"></div>
+                </div>
+                
+                {manualItems.map((item) => (
+                  <div key={item.tempId} className="flex gap-3 items-center bg-slate-50 p-2 rounded-xl border border-slate-100">
+                    <ProductSearchSelect 
+                      value={item.product_id}
+                      onChange={(val) => updateManualItem(item.tempId, 'product_id', val)}
+                      products={products.filter(p => p.supplier_id === selectedSupplierId)}
+                    />
+                    
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      value={item.quantity}
+                      onChange={e => updateManualItem(item.tempId, 'quantity', parseInt(e.target.value) || 0)}
+                      className="w-24 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-bold text-slate-900 text-center text-sm"
+                    />
+                    
+                    <button 
+                      type="button" 
+                      onClick={() => removeManualItem(item.tempId)}
+                      disabled={manualItems.length === 1}
+                      className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              
+              <button 
+                type="button"
+                onClick={addManualItem}
+                className="w-full py-3 mt-2 border-2 border-dashed border-slate-200 text-slate-500 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors flex items-center justify-center gap-2 text-sm"
+              >
+                <Plus size={16} /> Add Another Product
+              </button>
+            </div>
+            
+            <div className="px-6 py-4 border-t border-slate-100 flex gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 px-4 py-3 border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleUpdateItems}
+                disabled={editing || manualItems.length === 0}
+                className="flex-1 px-4 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {editing && <RefreshCw size={16} className="animate-spin" />}
+                Save Changes ({manualItems.length} items)
+              </button>
+            </div>
           </div>
         </div>
       )}

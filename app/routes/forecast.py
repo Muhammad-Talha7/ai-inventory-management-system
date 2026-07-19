@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import math
 
-from app.models import Users, Products, Inventory, PurchaseOrders
+from app.models import Users, Products, Inventory, PurchaseOrders, PurchaseOrderItems
 from app.core.dependencies import get_db, require_role
 from app.ai.forecasting import train_model, forecast_product, bulk_forecast_demand
 
@@ -39,11 +39,12 @@ def get_reorder_suggestions(
         # Subquery to calculate incoming stock (Scheduled or Approved Purchase Orders)
         incoming_subq = (
             db.query(
-                PurchaseOrders.product_id,
-                func.sum(PurchaseOrders.order_quantity).label("incoming_stock")
+                PurchaseOrderItems.product_id,
+                func.sum(PurchaseOrderItems.order_quantity).label("incoming_stock")
             )
+            .join(PurchaseOrders, PurchaseOrderItems.order_id == PurchaseOrders.order_id)
             .filter(PurchaseOrders.status.in_(["Scheduled", "Pending Approval"]))
-            .group_by(PurchaseOrders.product_id)
+            .group_by(PurchaseOrderItems.product_id)
             .subquery()
         )
 

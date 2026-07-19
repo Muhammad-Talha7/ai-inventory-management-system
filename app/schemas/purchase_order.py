@@ -19,6 +19,7 @@ class PurchaseOrderItemResponse(PurchaseOrderItemBase):
 
 class PurchaseOrderBase(BaseModel):
     status: str
+    supplier_id: Optional[str] = None
 
 class PurchaseOrderCreate(PurchaseOrderBase):
     pass
@@ -43,4 +44,8 @@ class ManualOrderItemCreate(BaseModel):
     order_quantity: int
 
 class ManualOrderCreate(BaseModel):
+    supplier_id: str
+    items: List[ManualOrderItemCreate]
+
+class OrderItemsUpdate(BaseModel):
     items: List[ManualOrderItemCreate]

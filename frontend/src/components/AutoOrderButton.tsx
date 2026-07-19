@@ -3,10 +3,14 @@
 import React, { useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function AutoOrderButton() {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  if (user?.role !== 'manager') return null;
 
   const handleRunForecast = async () => {
     setIsLoading(true);

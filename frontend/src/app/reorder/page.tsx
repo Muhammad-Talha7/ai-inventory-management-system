@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 
 interface ReorderSuggestion {
   product_id: string;
@@ -31,6 +32,7 @@ type SortDir = 'asc' | 'desc';
 
 export default function ReorderSuggestionsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [suggestions, setSuggestions] = useState<ReorderSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -163,14 +165,16 @@ export default function ReorderSuggestionsPage() {
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             Refresh
           </button>
-          <button
-            onClick={handleGenerateOrders}
-            disabled={loading || generating || suggestions.length === 0}
-            className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-60"
-          >
-            {generating ? <RefreshCw size={16} className="animate-spin" /> : <ShoppingCart size={16} />}
-            Generate Purchase Orders
-          </button>
+          {user?.role === 'manager' && (
+            <button
+              onClick={handleGenerateOrders}
+              disabled={loading || generating || suggestions.length === 0}
+              className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-60"
+            >
+              {generating ? <RefreshCw size={16} className="animate-spin" /> : <ShoppingCart size={16} />}
+              Generate Purchase Orders
+            </button>
+          )}
         </div>
       </div>
 
