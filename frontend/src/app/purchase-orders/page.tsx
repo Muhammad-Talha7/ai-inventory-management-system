@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { ClipboardList, CheckCircle2, Clock, Calendar, RefreshCw, XCircle, Plus, AlertCircle, ChevronDown, ChevronRight, Trash2, Scan } from 'lucide-react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { ClipboardList, CheckCircle2, Clock, Calendar, RefreshCw, XCircle, Plus, AlertCircle, ChevronDown, ChevronRight, Trash2, Scan, Loader2 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import { useSearchParams } from 'next/navigation';
 
 interface PurchaseOrderItem {
   id: number;
@@ -71,8 +72,9 @@ interface PurchaseOrder {
   items: PurchaseOrderItem[];
 }
 
-export default function PurchaseOrdersPage() {
+function PurchaseOrdersPageContent() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,11 +112,15 @@ export default function PurchaseOrdersPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [rejecting, setRejecting] = useState(false);
 
+  // Cancel Confirmation Modal State
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [poToCancel, setPoToCancel] = useState<number | null>(null);
+
   const fetchOrders = async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await apiFetch(`/purchase-orders?page=${page}`);
+      const res = await apiFetch(`/purchase-orders/?page=${page}`);
       if (res.success) {
         setOrders(res.data);
         setHasMore(res.has_more);
@@ -157,15 +163,9 @@ export default function PurchaseOrdersPage() {
     setExpandedOrders(newExpanded);
   };
 
-  const handleCancelOrder = async (orderId: number) => {
-    try {
-      await apiFetch(`/purchase-orders/${orderId}/status?status=Cancelled`, {
-        method: 'PATCH',
-      });
-      setOrders(orders.map(o => o.order_id === orderId ? { ...o, status: 'Cancelled' } : o));
-    } catch (err: any) {
-      alert(err.message || 'Failed to cancel the order.');
-    }
+  const handleCancelOrder = (orderId: number) => {
+    setPoToCancel(orderId);
+    setShowCancelModal(true);
   };
 
   const handleCompleteOrder = async (orderId: number) => {
@@ -254,6 +254,19 @@ export default function PurchaseOrdersPage() {
     setManualItems([]);
     setSelectedSupplierId('');
   };
+
+  useEffect(() => {
+    const highlight = searchParams.get('highlight');
+    if (highlight) {
+      const id = parseInt(highlight, 10);
+      if (!isNaN(id)) {
+        setExpandedOrders(new Set([id]));
+      }
+    }
+    if (searchParams.get('new') === 'true') {
+      handleOpenManualModal();
+    }
+  }, [searchParams]);
 
   const handleOpenEditModal = (order: PurchaseOrder) => {
     setEditingOrder(order);
@@ -910,6 +923,63 @@ export default function PurchaseOrdersPage() {
           </div>
         </div>
       )}
+
+      {/* Cancel Confirmation Modal */}
+      {showCancelModal && poToCancel !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-xl font-black text-slate-900">Cancel Order</h2>
+              <button onClick={() => setShowCancelModal(false)} className="text-slate-400 hover:text-slate-600">
+                <XCircle size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-slate-600 text-sm font-medium">Are you sure you want to cancel Purchase Order #{poToCancel}?</p>
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(false)}
+                  className="flex-1 px-4 py-3 border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors"
+                >
+                  No, Keep It
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const orderId = poToCancel;
+                    setShowCancelModal(false);
+                    try {
+                      await apiFetch(`/purchase-orders/${orderId}/status?status=Cancelled`, {
+                        method: 'PATCH',
+                      });
+                      setOrders(orders.map(o => o.order_id === orderId ? { ...o, status: 'Cancelled' } : o));
+                    } catch (err: any) {
+                      alert(err.message || 'Failed to cancel the order.');
+                    }
+                  }}
+                  className="flex-1 px-4 py-3 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-700 transition-colors"
+                >
+                  Yes, Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function PurchaseOrdersPage() {
+  return (
+    <Suspense fallback={
+      <div className="h-[80vh] flex flex-col items-center justify-center">
+        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
+        <p className="text-slate-500 font-medium">Loading Purchase Orders...</p>
+      </div>
+    }>
+      <PurchaseOrdersPageContent />
+    </Suspense>
   );
 }

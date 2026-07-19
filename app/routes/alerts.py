@@ -34,7 +34,17 @@ def get_alerts(
         .outerjoin(Resolver, Alerts.resolved_by == Resolver.user_id)
     )
 
-    if current_user.role != "admin":
+    if current_user.role == "admin":
+        query = query.filter(Alerts.alert_type == "USER_ALERT")
+    elif current_user.role == "auditor":
+        from sqlalchemy import or_
+        query = query.filter(
+            or_(
+                Alerts.alert_type == "AUDIT_ISSUE",
+                Alerts.target_user_id == current_user.user_id
+            )
+        )
+    else:
         from sqlalchemy import or_
         query = query.filter(
             or_(
@@ -88,7 +98,7 @@ def get_alerts(
 @router.get("/managers", response_model=dict)
 def get_managers(
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("admin"))
+    current_user: Users = Depends(require_role("admin", "auditor"))
 ):
     managers = db.query(Users).filter(Users.role == "manager").all()
     return {
@@ -202,7 +212,7 @@ def assign_investigation(
     manager_id: int = Body(..., embed=True),
     notes: str = Body("", embed=True),
     db: Session = Depends(get_db),
-    current_user: Users = Depends(require_role("admin"))
+    current_user: Users = Depends(require_role("admin", "auditor"))
 ):
     alert = db.query(Alerts).filter(Alerts.id == alert_id).first()
     if not alert:
@@ -214,13 +224,14 @@ def assign_investigation(
     if not manager:
         raise HTTPException(status_code=404, detail="Manager not found")
 
-    note_suffix = f" Notes from Admin: {notes.strip()}" if notes and notes.strip() else ""
+    role_label = "Auditor" if current_user.role == "auditor" else "Admin"
+    note_suffix = f" Notes from {role_label}: {notes.strip()}" if notes and notes.strip() else ""
     investigation_alert = Alerts(
         product_id=None,
         alert_type="INVESTIGATION_ASSIGNED",
         target_role=None,
         target_user_id=manager_id,
-        message=f"[Admin Investigation Assignment] You have been assigned to investigate a flagged issue. Original report: {alert.message}{note_suffix}",
+        message=f"[{role_label} Investigation Assignment] You have been assigned to investigate a flagged issue. Original report: {alert.message}{note_suffix}",
         is_resolved=0,
     )
     db.add(investigation_alert)

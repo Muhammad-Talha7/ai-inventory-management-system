@@ -131,7 +131,7 @@ class PurchaseOrders(Base):
 class PurchaseOrderItems(Base):
     __tablename__ = "purchase_order_items"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column("item_id", Integer, primary_key=True, autoincrement=True)
     order_id = Column(Integer, ForeignKey("purchase_orders.order_id"))
     product_id = Column(String(10), ForeignKey("products.product_id"))
     order_quantity = Column(Integer)
@@ -140,7 +140,7 @@ class PurchaseOrderItems(Base):
 class AuditLogs(Base):
     __tablename__ = "audit_logs"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column("log_id", Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True)
     action = Column(String(255))
     entity_type = Column(String(100))

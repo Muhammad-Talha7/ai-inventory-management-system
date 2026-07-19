@@ -1,3 +1,13 @@
+import bcrypt
+if not hasattr(bcrypt, "__about__"):
+    bcrypt.__about__ = bcrypt
+orig_hashpw = bcrypt.hashpw
+def safe_hashpw(password, salt):
+    if len(password) > 72:
+        password = password[:72]
+    return orig_hashpw(password, salt)
+bcrypt.hashpw = safe_hashpw
+
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt

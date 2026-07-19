@@ -16,6 +16,7 @@ import {
   ArrowUpRight,
   Flag,
   UserCheck,
+  User,
   ChevronDown
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
@@ -128,6 +129,7 @@ export default function AlertsPage() {
   const getAlertStyle = (alert: any) => {
     if (alert.is_resolved) return { icon: 'bg-slate-100 text-slate-400', border: 'border-slate-100 opacity-70' };
     if (alert.alert_type === 'AUDIT_ISSUE') return { icon: 'bg-rose-100 text-rose-600', border: 'border-rose-200 bg-rose-50/30' };
+    if (alert.alert_type === 'USER_ALERT') return { icon: 'bg-indigo-100 text-indigo-600', border: 'border-indigo-200 bg-indigo-50/20' };
     if (alert.alert_type === 'INVESTIGATION_ASSIGNED') return { icon: 'bg-amber-100 text-amber-600', border: 'border-amber-200 bg-amber-50/30' };
     if (['LOW_STOCK', 'PO_OVERDUE', 'STOCK_REQ_REJECTED'].includes(alert.alert_type)) return { icon: 'bg-rose-50 text-rose-500', border: 'border-slate-200' };
     if (['STOCK_REQ_APPROVED', 'PO_APPROVED'].includes(alert.alert_type)) return { icon: 'bg-emerald-50 text-emerald-500', border: 'border-slate-200' };
@@ -137,6 +139,7 @@ export default function AlertsPage() {
   const getAlertIcon = (alert: any) => {
     if (alert.is_resolved) return <CheckCircle2 size={24} />;
     if (alert.alert_type === 'AUDIT_ISSUE') return <Flag size={24} />;
+    if (alert.alert_type === 'USER_ALERT') return <User size={24} />;
     if (alert.alert_type === 'INVESTIGATION_ASSIGNED') return <UserCheck size={24} />;
     return <AlertTriangle size={24} />;
   };
@@ -249,7 +252,7 @@ export default function AlertsPage() {
                           <span className="text-slate-400 font-mono">({alert.product_id})</span>
                         </div>
                       )}
-                      {alert.is_resolved && (
+                      {!!alert.is_resolved && (
                         <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-bold">
                           <Check size={14} />
                           <span>Marked done{alert.resolved_by_name ? ` by ${alert.resolved_by_name}` : ''}</span>
@@ -260,7 +263,7 @@ export default function AlertsPage() {
 
                   {!alert.is_resolved && (
                     <div className="shrink-0 flex items-center gap-2">
-                      {isAuditIssue && user?.role === 'admin' && (
+                      {isAuditIssue && (user?.role === 'admin' || user?.role === 'auditor') && (
                         <button
                           onClick={() => openAssignModal(alert)}
                           className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-colors shadow-lg shadow-rose-100"

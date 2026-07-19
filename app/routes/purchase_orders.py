@@ -168,21 +168,29 @@ def receive_purchase_order(
     if order.status != "Scheduled":
         raise HTTPException(status_code=400, detail="Only Scheduled orders can be received")
 
+    has_discrepancy = False
     for item_in in receive_data.items:
         db_item = db.query(PurchaseOrderItems).filter(PurchaseOrderItems.id == item_in.id, PurchaseOrderItems.order_id == order_id).first()
         if db_item:
             db_item.received_quantity = item_in.received_quantity
+            if db_item.received_quantity != db_item.order_quantity:
+                has_discrepancy = True
             
     order.receiving_notes = receive_data.receiving_notes
     order.received_by = current_user.user_id
     order.received_at = datetime.utcnow()
     order.status = "Pending Approval"
     
+    if has_discrepancy:
+        msg = f"Purchase Order #{order.order_id} received with discrepancies. Reason: {receive_data.receiving_notes or 'No notes'}. Needs approval."
+    else:
+        msg = f"Purchase Order #{order.order_id} received successfully (no discrepancies). Needs approval."
+    
     alert = Alerts(
         product_id=None, # General alert for PO
         alert_type="PO_RECEIVED",
         target_role="manager",
-        message=f"Purchase Order #{order.order_id} has been received by staff and needs your approval.",
+        message=msg,
         is_resolved=0
     )
     db.add(alert)
@@ -378,6 +386,16 @@ def create_manual_order(
         )
         db.add(po_item)
     
+    # Create alert for staff
+    alert = Alerts(
+        product_id=None,
+        alert_type="PO_CREATED",
+        target_role="staff",
+        message=f"New Purchase Order #{new_order.order_id} has been created and scheduled.",
+        is_resolved=0
+    )
+    db.add(alert)
+
     log_audit(
         db=db,
         user_id=current_user.user_id,

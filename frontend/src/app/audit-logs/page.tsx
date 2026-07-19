@@ -34,6 +34,9 @@ export default function AuditLogsPage() {
   const [flagging, setFlagging] = useState(false);
   const [flagSuccess, setFlagSuccess] = useState<string | null>(null);
 
+  // JSON Diff Modal State
+  const [selectedLogForDiff, setSelectedLogForDiff] = useState<AuditLog | null>(null);
+
   const fetchLogs = async (pageNum: number = 1) => {
     try {
       setLoading(true);
@@ -165,6 +168,7 @@ export default function AuditLogsPage() {
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-100">
+                  <th className="text-left px-6 py-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Log #</span></th>
                   <th className="text-left px-6 py-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Timestamp</span></th>
                   <th className="text-left px-6 py-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">User</span></th>
                   <th className="text-left px-6 py-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Action</span></th>
@@ -179,7 +183,7 @@ export default function AuditLogsPage() {
                 {loading && logs.length === 0 ? (
                   Array.from({ length: 10 }).map((_, i) => (
                     <tr key={i}>
-                      {Array.from({ length: user?.role === 'auditor' ? 6 : 5 }).map((_, j) => (
+                      {Array.from({ length: user?.role === 'auditor' ? 7 : 6 }).map((_, j) => (
                         <td key={j} className="px-6 py-5">
                           <div className="h-3 bg-slate-100 rounded-full animate-pulse" style={{ width: '60%' }} />
                         </td>
@@ -188,13 +192,16 @@ export default function AuditLogsPage() {
                   ))
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan={user?.role === 'auditor' ? 6 : 5} className="px-6 py-20 text-center text-slate-500 font-medium">
+                    <td colSpan={user?.role === 'auditor' ? 7 : 6} className="px-6 py-20 text-center text-slate-500 font-medium">
                       No audit logs found.
                     </td>
                   </tr>
                 ) : (
                   logs.map((log) => (
                     <tr key={log.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="px-6 py-5 whitespace-nowrap">
+                        <span className="text-xs font-mono font-bold text-slate-400">#{log.id}</span>
+                      </td>
                       <td className="px-6 py-5 whitespace-nowrap">
                         <div className="flex items-center gap-2 text-sm text-slate-600 font-medium">
                           <Calendar size={14} className="text-slate-400" />
@@ -228,25 +235,14 @@ export default function AuditLogsPage() {
                       </td>
                       <td className="px-6 py-5 max-w-xs">
                         {log.new_values || log.old_values ? (
-                          <div className="group relative">
-                            <button className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
+                          <div className="relative">
+                            <button
+                              onClick={() => setSelectedLogForDiff(log)}
+                              className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                            >
                               <FileJson size={14} />
                               View JSON Diff
                             </button>
-                            <div className="absolute hidden group-hover:block z-10 bottom-full right-0 mb-2 w-96 bg-slate-900 text-white rounded-xl shadow-xl p-4 text-xs font-mono overflow-x-auto">
-                              {log.old_values && (
-                                <div className="mb-2">
-                                  <span className="text-slate-400 mb-1 block">Old Values:</span>
-                                  <pre className="text-rose-400">{JSON.stringify(log.old_values, null, 2)}</pre>
-                                </div>
-                              )}
-                              {log.new_values && (
-                                <div>
-                                  <span className="text-slate-400 mb-1 block">New Values:</span>
-                                  <pre className="text-emerald-400">{JSON.stringify(log.new_values, null, 2)}</pre>
-                                </div>
-                              )}
-                            </div>
                           </div>
                         ) : (
                           <span className="text-xs text-slate-400 italic">No diff data</span>
@@ -341,6 +337,90 @@ export default function AuditLogsPage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* JSON Diff Modal */}
+      {selectedLogForDiff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden border border-slate-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+                  <FileJson size={18} />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Audit JSON Diff</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Showing parameters for log #{selectedLogForDiff.id}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedLogForDiff(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-all">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-medium bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                <div>
+                  <span className="text-slate-400 block mb-0.5">Action</span>
+                  <span className="text-slate-800 font-bold uppercase">{selectedLogForDiff.action}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block mb-0.5">Entity Type</span>
+                  <span className="text-slate-800 font-bold capitalize">{selectedLogForDiff.entity_type}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block mb-0.5">Entity ID</span>
+                  <span className="text-slate-850 font-mono font-bold">{selectedLogForDiff.entity_id}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block mb-0.5">IP Address</span>
+                  <span className="text-slate-850 font-mono font-bold">{selectedLogForDiff.ip_address || 'N/A'}</span>
+                </div>
+              </div>
+
+              <div className="font-mono text-xs">
+                {selectedLogForDiff.old_values && selectedLogForDiff.new_values ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1 text-[10px]">Old Values</span>
+                      <div className="bg-rose-50/40 border border-rose-100 rounded-2xl p-4 overflow-x-auto min-h-[150px] max-h-[300px]">
+                        <pre className="text-rose-700 whitespace-pre-wrap">{JSON.stringify(selectedLogForDiff.old_values, null, 2)}</pre>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1 text-[10px]">New Values</span>
+                      <div className="bg-emerald-50/40 border border-emerald-100 rounded-2xl p-4 overflow-x-auto min-h-[150px] max-h-[300px]">
+                        <pre className="text-emerald-700 whitespace-pre-wrap">{JSON.stringify(selectedLogForDiff.new_values, null, 2)}</pre>
+                      </div>
+                    </div>
+                  </div>
+                ) : selectedLogForDiff.old_values ? (
+                  <div>
+                    <span className="text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1 text-[10px]">Removed/Old Values</span>
+                    <div className="bg-rose-50/40 border border-rose-100 rounded-2xl p-4 overflow-x-auto min-h-[150px] max-h-[300px]">
+                      <pre className="text-rose-700 whitespace-pre-wrap">{JSON.stringify(selectedLogForDiff.old_values, null, 2)}</pre>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <span className="text-slate-500 font-bold uppercase tracking-wider block mb-2 px-1 text-[10px]">Created/New Values</span>
+                    <div className="bg-emerald-50/40 border border-emerald-100 rounded-2xl p-4 overflow-x-auto min-h-[150px] max-h-[300px]">
+                      <pre className="text-emerald-700 whitespace-pre-wrap">{JSON.stringify(selectedLogForDiff.new_values, null, 2)}</pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30 flex justify-end">
+              <button
+                onClick={() => setSelectedLogForDiff(null)}
+                className="px-6 py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-bold transition-colors"
+              >
+                Close Diff
+              </button>
             </div>
           </div>
         </div>
