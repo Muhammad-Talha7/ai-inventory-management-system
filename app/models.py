@@ -137,6 +137,30 @@ class PurchaseOrderItems(Base):
     order_quantity = Column(Integer)
     received_quantity = Column(Integer, nullable=True)
 
+class DispatchOrders(Base):
+    __tablename__ = "dispatch_orders"
+
+    dispatch_id = Column(Integer, primary_key=True, autoincrement=True)
+    status = Column(String(50), default="Scheduled")
+    created_at = Column(DateTime, default=func.now())
+    created_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    dispatched_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    dispatched_at = Column(DateTime, nullable=True)
+    dispatching_notes = Column(Text, nullable=True)
+    approved_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    rejected_by = Column(Integer, ForeignKey("users.user_id"), nullable=True)
+    destination = Column(String(255), nullable=True)
+
+class DispatchOrderItems(Base):
+    __tablename__ = "dispatch_order_items"
+
+    id = Column("item_id", Integer, primary_key=True, autoincrement=True)
+    dispatch_id = Column(Integer, ForeignKey("dispatch_orders.dispatch_id"))
+    product_id = Column(String(10), ForeignKey("products.product_id"))
+    order_quantity = Column(Integer)
+    dispatched_quantity = Column(Integer, nullable=True)
+
 class AuditLogs(Base):
     __tablename__ = "audit_logs"
 

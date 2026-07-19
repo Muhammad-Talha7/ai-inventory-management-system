@@ -31,7 +31,7 @@ interface PurchaseOrder {
 function ScannerPageContent() {
   const searchParams = useSearchParams();
   const initialMode = (searchParams.get('mode') as any) || 'PO';
-  const [scanMode, setScanMode] = useState<'IN' | 'OUT' | 'PO'>(initialMode);
+  const [scanMode, setScanMode] = useState<'IN' | 'OUT' | 'PO' | 'SO'>(initialMode);
 
   // PO Session State
   const [poScans, setPoScans] = useState<any[]>([]);
@@ -48,6 +48,7 @@ function ScannerPageContent() {
 
   // Matching State
   const [matchedPo, setMatchedPo] = useState<PurchaseOrder | null>(null);
+  const [tiedOrders, setTiedOrders] = useState<any[]>([]);
   const [matchingError, setMatchingError] = useState('');
   const [receiveNotes, setReceiveNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -80,10 +81,11 @@ function ScannerPageContent() {
   // Poll scan-session when in PO mode (keeps standard UI synced)
   useEffect(() => {
     let interval: any;
-    if (scanMode === 'PO') {
+    if (scanMode === 'PO' || scanMode === 'SO') {
+      const endpoint = scanMode === 'PO' ? '/purchase-orders/scan-session' : '/dispatch-orders/scan-session';
       const syncSession = async () => {
         try {
-          const res = await apiFetch('/purchase-orders/scan-session');
+          const res = await apiFetch(endpoint);
           if (res.success) {
             setPoScans(res.data);
             setPoTotal(res.total);
@@ -200,13 +202,14 @@ function ScannerPageContent() {
 
   const submitScan = async (sku: string) => {
     try {
-      if (scanMode === 'PO') {
-        await apiFetch('/purchase-orders/scan-session', {
+      if (scanMode === 'PO' || scanMode === 'SO') {
+        const endpoint = scanMode === 'PO' ? '/purchase-orders/scan-session' : '/dispatch-orders/scan-session';
+        await apiFetch(endpoint, {
           method: 'POST',
           body: JSON.stringify({ sku, quantity: 1 }),
         });
         // Sync scan lists
-        const res = await apiFetch('/purchase-orders/scan-session');
+        const res = await apiFetch(endpoint);
         if (res.success) {
           setPoScans(res.data);
           setPoTotal(res.total);
@@ -229,10 +232,12 @@ function ScannerPageContent() {
 
   const clearSession = async () => {
     try {
-      await apiFetch('/purchase-orders/scan-session', { method: 'DELETE' });
+      const endpoint = scanMode === 'PO' ? '/purchase-orders/scan-session' : '/dispatch-orders/scan-session';
+      await apiFetch(endpoint, { method: 'DELETE' });
       setPoScans([]);
       setPoTotal(0);
       setMatchedPo(null);
+    setTiedOrders([]);
       setMatchingError('');
     } catch (err) {}
   };
@@ -242,16 +247,17 @@ function ScannerPageContent() {
       stopCamera();
       setMatchingError('');
 
-      const res = await apiFetch('/purchase-orders/?page=1');
+      const endpoint = scanMode === 'PO' ? '/purchase-orders/?page=1' : '/dispatch-orders/?page=1';
+      const res = await apiFetch(endpoint);
       if (!res.success) return;
 
       const scheduledPOs = res.data.filter((o: any) => o.status === 'Scheduled');
       if (scheduledPOs.length === 0) {
-        setMatchingError('No Scheduled Purchase Orders found.');
+        setMatchingError(`No Scheduled ${scanMode === 'PO' ? 'Purchase' : 'Dispatch'} Orders found.`);
         return;
       }
 
-      let bestMatch = null;
+      let bestMatches: any[] = [];
       let maxOverlap = -1;
 
       for (const po of scheduledPOs) {
@@ -262,19 +268,27 @@ function ScannerPageContent() {
             overlap += Math.min(scanned.quantity, item.order_quantity);
           }
         }
-        if (overlap > maxOverlap) {
-          maxOverlap = overlap;
-          bestMatch = po;
+        if (overlap > 0) {
+          if (overlap > maxOverlap) {
+            maxOverlap = overlap;
+            bestMatches = [po];
+          } else if (overlap === maxOverlap) {
+            bestMatches.push(po);
+          }
         }
       }
 
-      if (maxOverlap > 0 && bestMatch) {
-        setMatchedPo(bestMatch);
+      if (maxOverlap > 0 && bestMatches.length > 0) {
+        if (bestMatches.length === 1) {
+          setMatchedPo(bestMatches[0]);
+        } else {
+          setTiedOrders(bestMatches);
+        }
       } else {
-        setMatchingError('Could not find a PO matching the scanned items.');
+        setMatchingError(`Could not find a ${scanMode === 'PO' ? 'PO' : 'Dispatch Order'} matching the scanned items.`);
       }
     } catch (err: any) {
-      setMatchingError(err.message || 'Error matching PO');
+      setMatchingError(err.message || 'Error matching order');
     }
   };
 
@@ -300,23 +314,35 @@ function ScannerPageContent() {
     try {
       const payloadItems = matchedPo.items.map((item: any) => {
         const scanned = poScans.find((s) => s.sku.toLowerCase().trim() === item.sku.toLowerCase().trim());
-        return {
-          id: item.id,
-          received_quantity: scanned ? scanned.quantity : 0,
-        };
+        if (scanMode === 'PO') {
+            return {
+              id: item.id,
+              received_quantity: scanned ? scanned.quantity : 0,
+            };
+        } else {
+            return {
+              id: item.id,
+              dispatched_quantity: scanned ? scanned.quantity : 0,
+            };
+        }
       });
 
-      const res = await apiFetch(`/purchase-orders/${matchedPo.order_id}/receive`, {
+      const endpoint = scanMode === 'PO' 
+        ? `/purchase-orders/${matchedPo.order_id}/receive`
+        : `/dispatch-orders/${(matchedPo as any).dispatch_id}/dispatch`;
+        
+      const bodyPayload = scanMode === 'PO'
+        ? { items: payloadItems, receiving_notes: receiveNotes }
+        : { items: payloadItems, dispatching_notes: receiveNotes };
+
+      const res = await apiFetch(endpoint, {
         method: 'POST',
-        body: JSON.stringify({
-          items: payloadItems,
-          receiving_notes: receiveNotes,
-        }),
+        body: JSON.stringify(bodyPayload),
       });
 
       if (res.success) {
         await clearSession();
-        window.location.href = '/purchase-orders';
+        window.location.href = scanMode === 'PO' ? '/purchase-orders' : '/dispatch-orders';
       }
     } catch (err: any) {
       setMatchingError(err.message || 'Failed to submit receive.');
@@ -339,27 +365,33 @@ function ScannerPageContent() {
 
         <div className="flex items-center gap-2">
           <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
-            {[
-              { mode: 'PO', label: 'Receive PO', colorClass: 'text-indigo-600' },
-              { mode: 'IN', label: 'Stock In', colorClass: 'text-emerald-600' },
-              { mode: 'OUT', label: 'Stock Out', colorClass: 'text-rose-600' },
-            ].map((btn) => (
-              <button
-                key={btn.mode}
-                onClick={() => {
-                  stopCamera();
-                  setScanMode(btn.mode as any);
-                }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                  scanMode === btn.mode
-                    ? `bg-white ${btn.colorClass} shadow-sm`
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <PackageCheck size={14} />
-                {btn.label}
-              </button>
-            ))}
+            <button
+              onClick={() => { setScanMode('PO'); clearSession(); }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                scanMode === 'PO' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <PackageCheck size={14} />
+              Receive PO
+            </button>
+            <button
+              onClick={() => { setScanMode('SO'); clearSession(); }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                scanMode === 'SO' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Box size={14} />
+              Dispatch Order
+            </button>
+            <button
+              onClick={() => setScanMode('IN')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                scanMode === 'IN' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <PackageCheck size={14} />
+              Stock In
+            </button>
           </div>
         </div>
       </div>
@@ -422,23 +454,53 @@ function ScannerPageContent() {
                   <Camera size={14} /> Start Camera Scanner
                 </button>
 
-                {scanMode === 'PO' && poTotal > 0 && !matchedPo && (
+                {(scanMode === 'PO' || scanMode === 'SO') && poTotal > 0 && !matchedPo && tiedOrders.length === 0 && (
                   <button
                     onClick={handleMatchPO}
                     className="mt-4 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black shadow-lg shadow-emerald-500/20 transition uppercase tracking-widest text-xs flex items-center gap-2"
                   >
-                    <Search size={14} /> Match Scans to PO
+                    <Search size={14} /> {scanMode === 'PO' ? 'Match Scans to PO' : 'Match Scans to DO'}
                   </button>
                 )}
               </div>
             )}
           </div>
 
-          {matchedPo && scanMode === 'PO' && (
+          {tiedOrders.length > 0 && !matchedPo && (
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm mb-6">
+              <h3 className="text-xl font-black text-slate-900 mb-2">Multiple Matches Found</h3>
+              <p className="text-sm text-slate-500 mb-4">Please select the correct order you are scanning for:</p>
+              <div className="space-y-3">
+                {tiedOrders.map((order: any) => (
+                  <div 
+                    key={order.order_id || order.dispatch_id}
+                    onClick={() => { setMatchedPo(order); setTiedOrders([]); }}
+                    className="p-4 border border-slate-200 rounded-xl flex items-center justify-between cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors"
+                  >
+                    <div>
+                      <div className="font-bold text-slate-900">
+                        {scanMode === 'PO' ? `Purchase Order #${order.order_id}` : `Dispatch Order #${order.dispatch_id}`}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        {order.items.length} items
+                        {order.supplier_id ? ` · Supplier: ${order.supplier_id}` : ''}
+                        {order.destination ? ` · Destination: ${order.destination}` : ''}
+                      </div>
+                    </div>
+                    <button className="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-bold uppercase tracking-widest rounded-lg">
+                      Select
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {matchedPo && (scanMode === 'PO' || scanMode === 'SO') && (
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
               <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
                 <PackageCheck size={20} className="text-indigo-600" />
-                Matched Purchase Order #{matchedPo.order_id}
+                {scanMode === 'PO' ? `Matched Purchase Order #${matchedPo.order_id}` : `Matched Dispatch Order #${(matchedPo as any).dispatch_id}`}
               </h3>
 
               <div className="overflow-x-auto mb-4">
@@ -530,7 +592,7 @@ function ScannerPageContent() {
                   disabled={isSubmitting}
                   className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-md hover:bg-indigo-700 disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Submitting...' : 'Confirm Receipt'}
+                  {isSubmitting ? 'Submitting...' : (scanMode === 'PO' ? 'Confirm Receipt' : 'Confirm Dispatch')}
                 </button>
               </div>
             </div>
@@ -544,14 +606,14 @@ function ScannerPageContent() {
                 Live Session Tally
               </p>
               <div className="flex items-end justify-between">
-                <h2 className="text-5xl font-black">{scanMode === 'PO' ? poTotal : '--'}</h2>
+                <h2 className="text-5xl font-black">{(scanMode === 'PO' || scanMode === 'SO') ? poTotal : '--'}</h2>
                 <div className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-indigo-500/20 text-indigo-400">
                   {scanMode} MODE
                 </div>
               </div>
             </div>
 
-            {scanMode === 'PO' && poScans.length > 0 && (
+            {(scanMode === 'PO' || scanMode === 'SO') && poScans.length > 0 && (
               <div className="space-y-4 pt-8 border-t border-white/10">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-300">

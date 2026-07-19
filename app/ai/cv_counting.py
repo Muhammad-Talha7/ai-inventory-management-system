@@ -9,6 +9,7 @@ Usage:
     python -m app.ai.cv_counting IN
     python -m app.ai.cv_counting OUT
     python -m app.ai.cv_counting PO
+    python -m app.ai.cv_counting SO
 
 Press 'q' to quit the webcam session.
 """
@@ -18,6 +19,7 @@ import time
 import threading
 import requests
 import cv2
+import math
 
 # ---------------------------------------------------------------------------
 # Configuration — adjust these to match your environment
@@ -25,15 +27,26 @@ import cv2
 API_BASE_URL = "http://localhost:8000"
 STOCK_ENDPOINT = f"{API_BASE_URL}/stock/scan"   # SKU-based endpoint
 PO_ENDPOINT = f"{API_BASE_URL}/purchase-orders/scan-session" # PO Receiving endpoint
+SO_ENDPOINT = f"{API_BASE_URL}/dispatch-orders/scan-session" # SO Dispatch endpoint
 AUTH_TOKEN = ""                                  # Set via login, or leave blank for dev
 COOLDOWN_SECONDS = 2                             # Per-SKU scan cooldown
 
 # ---------------------------------------------------------------------------
 # State
 # ---------------------------------------------------------------------------
-last_scan_time: dict[str, float] = {}   # SKU -> last timestamp
+tracked_objects = []
+MAX_DISTANCE = 150  # pixels
+EXPIRE_TIME = 2.0   # seconds
 total_scanned = 0
 scan_lock = threading.Lock()
+
+def calculate_centroid(pts):
+    x = sum(pt[0] for pt in pts) / len(pts)
+    y = sum(pt[1] for pt in pts) / len(pts)
+    return (x, y)
+
+def distance(p1, p2):
+    return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
 
 
 def _post_transaction(sku: str, mode: str):
@@ -46,6 +59,12 @@ def _post_transaction(sku: str, mode: str):
 
     if mode == "PO":
         target_url = PO_ENDPOINT
+        payload = {
+            "sku": sku,
+            "quantity": 1
+        }
+    elif mode == "SO":
+        target_url = SO_ENDPOINT
         payload = {
             "sku": sku,
             "quantity": 1
@@ -76,8 +95,8 @@ def run(mode: str):
     global total_scanned
 
     mode = mode.upper()
-    if mode not in ("IN", "OUT", "PO"):
-        print("Error: mode must be IN, OUT, or PO")
+    if mode not in ("IN", "OUT", "PO", "SO"):
+        print("Error: mode must be IN, OUT, PO, or SO")
         sys.exit(1)
 
     cap = cv2.VideoCapture(0)
@@ -96,31 +115,57 @@ def run(mode: str):
         # ------------------------------------------------------------------
         # QR Detection
         # ------------------------------------------------------------------
-        data, bbox, _ = detector.detectAndDecode(frame)
+        retval, decoded_info, points, _ = detector.detectAndDecodeMulti(frame)
+        
+        current_time = time.time()
+        
+        # Expire old objects
+        global tracked_objects
+        tracked_objects = [obj for obj in tracked_objects if current_time - obj["last_seen"] < EXPIRE_TIME]
 
-        if data and bbox is not None:
-            sku = data.strip()
-            pts = bbox[0].astype(int)
+        if retval and len(decoded_info) > 0:
+            for i, data in enumerate(decoded_info):
+                if not data:
+                    continue
+                sku = data.strip()
+                pts = points[i].astype(int)
+                centroid = calculate_centroid(pts)
 
-            # Draw bounding box (green)
-            for i in range(len(pts)):
-                cv2.line(frame, tuple(pts[i]), tuple(pts[(i + 1) % len(pts)]),
-                         (0, 255, 0), 3)
+                # Draw bounding box (green)
+                for j in range(len(pts)):
+                    cv2.line(frame, tuple(pts[j]), tuple(pts[(j + 1) % len(pts)]),
+                             (0, 255, 0), 3)
 
-            # Show SKU next to the QR code
-            cv2.putText(frame, f"SKU: {sku}", (pts[0][0], pts[0][1] - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                # Show SKU next to the QR code
+                cv2.putText(frame, f"SKU: {sku}", (pts[0][0], pts[0][1] - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
-            # Cooldown check
-            now = time.time()
-            last = last_scan_time.get(sku, 0)
-            if now - last >= COOLDOWN_SECONDS:
-                last_scan_time[sku] = now
-                threading.Thread(
-                    target=_post_transaction,
-                    args=(sku, mode),
-                    daemon=True,
-                ).start()
+                # Match with tracked objects
+                matched_obj = None
+                for obj in tracked_objects:
+                    if obj["sku"] == sku and distance(obj["centroid"], centroid) < MAX_DISTANCE:
+                        matched_obj = obj
+                        break
+                
+                if matched_obj:
+                    # Update its position and time
+                    matched_obj["centroid"] = centroid
+                    matched_obj["last_seen"] = current_time
+                else:
+                    # New object detected!
+                    new_obj = {
+                        "sku": sku,
+                        "centroid": centroid,
+                        "last_seen": current_time,
+                    }
+                    tracked_objects.append(new_obj)
+                    
+                    # Post transaction
+                    threading.Thread(
+                        target=_post_transaction,
+                        args=(sku, mode),
+                        daemon=True,
+                    ).start()
 
         # ------------------------------------------------------------------
         # HUD overlay
@@ -145,6 +190,6 @@ def run(mode: str):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python -m app.ai.cv_counting <IN|OUT|PO>")
+        print("Usage: python -m app.ai.cv_counting <IN|OUT|PO|SO>")
         sys.exit(1)
     run(sys.argv[1])

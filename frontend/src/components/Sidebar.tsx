@@ -33,6 +33,7 @@ const navItems = [
   { icon: TrendingUp, label: 'AI Forecasts', href: '/forecasts', roles: ['manager'] },
   { icon: ShoppingCart, label: 'Reorder Suggestions', href: '/reorder', roles: ['manager'] },
   { icon: ClipboardList, label: 'Purchase Orders', href: '/purchase-orders', roles: ['manager', 'staff', 'auditor'] },
+  { icon: Package, label: 'Dispatch Orders', href: '/dispatch-orders', roles: ['manager', 'staff', 'auditor'] },
   { icon: Camera, label: 'CV Scanner', href: '/scanner', roles: ['staff'] },
   { icon: AlertTriangle, label: 'Alerts', href: '/alerts', roles: ['admin', 'manager', 'staff', 'auditor'] },
   { icon: ShieldCheck, label: 'Audit Logs', href: '/audit-logs', roles: ['auditor'] },
