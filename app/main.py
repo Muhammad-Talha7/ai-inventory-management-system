@@ -178,6 +178,6 @@ def shutdown_event():
     scheduler.shutdown(wait=False)
     logger.info("APScheduler shut down.")
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {"message": "Warehouse API running"}
