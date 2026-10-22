@@ -43,7 +43,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-walmart.csv
+
 init_db_error.log
 
 
