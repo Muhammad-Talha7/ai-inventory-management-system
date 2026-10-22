@@ -1,4 +1,4 @@
-fastapi
+fastapi[standard]
 uvicorn
 sqlalchemy
 pymysql
@@ -11,3 +11,4 @@ numpy
 scikit-learn
 opencv-python
 apscheduler
+python-dotenv

@@ -95,7 +95,7 @@ function ForecastsPageContent() {
         setError(res.message || 'Failed to train model.');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to train model. You might need admin privileges.');
+      setError(err.message || 'Failed to train model. You might need manager or admin privileges.');
     } finally {
       setTraining(false);
     }

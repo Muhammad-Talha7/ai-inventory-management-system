@@ -133,8 +133,8 @@ source venv/bin/activate  # macOS/Linux
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure database (update app/database.py with your credentials)
-# Create MySQL database: warehouse
+# Configure environment variables
+cp app/.env.example app/.env
 
 # Seed database
 python app/init_db.py

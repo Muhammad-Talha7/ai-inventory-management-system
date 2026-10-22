@@ -178,66 +178,51 @@ def seed_data():
         if existing_sales_count > 0:
             print(f"  [SKIP] SalesHistory already has {existing_sales_count:,} rows. Skipping to avoid duplicates.\n")
         else:
-            sales_objs = []
-            for i, row in df.iterrows():
-                sales_objs.append(SalesHistory(
-                    product_id=row["product_id"],
-                    quantity_sold=int(row["units_sold"]),
-                    unit_price=row["unit_price"],
-                    discount=row["discount"],
-                    weather_condition=row["weather_condition"],
-                    is_holiday_promotion=int(row["holiday_promotion"]),
-                    competitor_pricing=row["competitor_pricing"],
-                    seasonality=row["seasonality"],
-                    date=row["date"],
-                ))
-                if (i + 1) % 50_000 == 0:
-                    print(f"    ... {i + 1:,} rows prepared")
-            session.bulk_save_objects(sales_objs)
-            session.commit()
-            print(f"  [OK] SalesHistory done ({len(sales_objs):,} rows).\n")
+            sales_df = pd.DataFrame({
+                "product_id": df["product_id"],
+                "quantity_sold": df["units_sold"].astype(int),
+                "unit_price": df["unit_price"].astype(float),
+                "discount": df["discount"].astype(float),
+                "weather_condition": df["weather_condition"],
+                "is_holiday_promotion": df["holiday_promotion"].astype(int),
+                "competitor_pricing": df["competitor_pricing"].astype(float),
+                "seasonality": df["seasonality"],
+                "date": pd.to_datetime(df["date"]).dt.date,
+            })
+            sales_df.to_sql("sales_history", con=engine, if_exists="append", index=False, chunksize=3000, method="multi")
+            print(f"  [OK] SalesHistory done ({len(sales_df):,} rows).\n")
 
         print("Inserting StockTransactions ...")
         existing_stock_count = session.query(StockTransactions).count()
         if existing_stock_count > 0:
             print(f"  [SKIP] StockTransactions already has {existing_stock_count:,} rows. Skipping to avoid duplicates.\n")
         else:
-            stock_df = df[df["units_ordered"] > 0].reset_index(drop=True)
-            stock_objs = []
-            for i, row in stock_df.iterrows():
-                stock_objs.append(StockTransactions(
-                    product_id=row["product_id"],
-                    user_id=1,
-                    quantity=int(row["units_ordered"]),
-                    type="IN",
-                    source="Initial Seed",
-                    timestamp=row["date"],
-                    status="approved",
-                    requested_by=1,
-                ))
-                if (i + 1) % 50_000 == 0:
-                    print(f"    ... {i + 1:,} rows prepared")
-            session.bulk_save_objects(stock_objs)
-            session.commit()
-            print(f"  [OK] StockTransactions done ({len(stock_objs):,} rows).\n")
+            raw_stock = df[df["units_ordered"] > 0].reset_index(drop=True)
+            stock_df = pd.DataFrame({
+                "product_id": raw_stock["product_id"],
+                "user_id": 1,
+                "quantity": raw_stock["units_ordered"].astype(int),
+                "type": "IN",
+                "source": "Initial Seed",
+                "timestamp": pd.to_datetime(raw_stock["date"]),
+                "status": "approved",
+                "requested_by": 1,
+            })
+            stock_df.to_sql("stock_transactions", con=engine, if_exists="append", index=False, chunksize=3000, method="multi")
+            print(f"  [OK] StockTransactions done ({len(stock_df):,} rows).\n")
 
         print("Inserting Forecasts ...")
         existing_forecasts_count = session.query(Forecasts).count()
         if existing_forecasts_count > 0:
             print(f"  [SKIP] Forecasts already has {existing_forecasts_count:,} rows. Skipping to avoid duplicates.\n")
         else:
-            forecast_objs = []
-            for i, row in df.iterrows():
-                forecast_objs.append(Forecasts(
-                    product_id=row["product_id"],
-                    forecast_date=row["date"],
-                    predicted_demand=row["demand_forecast"],
-                ))
-                if (i + 1) % 50_000 == 0:
-                    print(f"    ... {i + 1:,} rows prepared")
-            session.bulk_save_objects(forecast_objs)
-            session.commit()
-            print(f"  [OK] Forecasts done ({len(forecast_objs):,} rows).\n")
+            forecast_df = pd.DataFrame({
+                "product_id": df["product_id"],
+                "forecast_date": pd.to_datetime(df["date"]).dt.date,
+                "predicted_demand": df["demand_forecast"].astype(float),
+            })
+            forecast_df.to_sql("forecasts", con=engine, if_exists="append", index=False, chunksize=3000, method="multi")
+            print(f"  [OK] Forecasts done ({len(forecast_df):,} rows).\n")
 
     except Exception as e:
         session.rollback()

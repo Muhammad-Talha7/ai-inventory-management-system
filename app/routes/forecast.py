@@ -12,7 +12,7 @@ router = APIRouter()
 
 @router.post("/train", response_model=dict)
 def train_forecast_model(
-    current_user: Users = Depends(require_role("admin")),
+    current_user: Users = Depends(require_role("admin", "manager")),
 ):
     """Admin-only endpoint to trigger model (re)training."""
     try:

@@ -35,6 +35,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+.venv/
 
 # vercel
 .vercel
@@ -44,7 +46,8 @@ yarn-error.log*
 next-env.d.ts
 
 
-init_db_error.log
+*.log
+*.db
 
 
 #fastapi 

@@ -84,7 +84,13 @@ def train_model():
         X = _build_features(df, le_weather, le_season, fit=True)
         y = df["quantity_sold"]
 
-        model = RandomForestRegressor(n_estimators=100, n_jobs=-1, random_state=42)
+        model = RandomForestRegressor(
+            n_estimators=100,
+            max_depth=12,
+            min_samples_leaf=5,
+            n_jobs=-1,
+            random_state=42
+        )
         model.fit(X, y)
 
         # Persist model + encoders
