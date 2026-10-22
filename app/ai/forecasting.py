@@ -11,7 +11,7 @@ import math
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import LabelEncoder
 
-from app.database import SessionLocal
+from app.database import engine, SessionLocal
 from app.models import SalesHistory, Forecasts
 
 logger = logging.getLogger(__name__)
@@ -50,67 +50,53 @@ def _build_features(df: pd.DataFrame, le_weather: LabelEncoder, le_season: Label
 
 
 def train_model():
-    """
-    Load all SalesHistory records, train a RandomForestRegressor on
-    quantity_sold, and save the model + encoders to disk.
-    """
     global _cached_model, _cached_encoders
 
     logger.info("Starting model training...")
-    db = SessionLocal()
-    try:
-        rows = db.query(SalesHistory).all()
-        if not rows:
-            raise ValueError("No SalesHistory data found. Seed the database first.")
+    query = (
+        "SELECT unit_price, discount, is_holiday_promotion, competitor_pricing, "
+        "weather_condition, seasonality, date, quantity_sold "
+        "FROM sales_history ORDER BY date DESC LIMIT 50000"
+    )
+    df = pd.read_sql(query, con=engine)
+    if df.empty:
+        raise ValueError("No SalesHistory data found. Seed the database first.")
 
-        # Build a DataFrame from ORM objects
-        data = []
-        for r in rows:
-            data.append({
-                "unit_price": float(r.unit_price),
-                "discount": float(r.discount),
-                "is_holiday_promotion": int(r.is_holiday_promotion),
-                "competitor_pricing": float(r.competitor_pricing),
-                "weather_condition": r.weather_condition,
-                "seasonality": r.seasonality,
-                "date": pd.Timestamp(r.date),
-                "quantity_sold": int(r.quantity_sold),
-            })
-        df = pd.DataFrame(data)
+    df["date"] = pd.to_datetime(df["date"])
+    df["unit_price"] = df["unit_price"].astype(float)
+    df["discount"] = df["discount"].astype(float)
+    df["is_holiday_promotion"] = df["is_holiday_promotion"].astype(int)
+    df["competitor_pricing"] = df["competitor_pricing"].astype(float)
+    df["quantity_sold"] = df["quantity_sold"].astype(int)
 
-        le_weather = LabelEncoder()
-        le_season = LabelEncoder()
+    le_weather = LabelEncoder()
+    le_season = LabelEncoder()
 
-        X = _build_features(df, le_weather, le_season, fit=True)
-        y = df["quantity_sold"]
+    X = _build_features(df, le_weather, le_season, fit=True)
+    y = df["quantity_sold"]
 
-        model = RandomForestRegressor(
-            n_estimators=100,
-            max_depth=12,
-            min_samples_leaf=5,
-            n_jobs=-1,
-            random_state=42
-        )
-        model.fit(X, y)
+    model = RandomForestRegressor(
+        n_estimators=50,
+        max_depth=12,
+        min_samples_leaf=5,
+        n_jobs=2,
+        random_state=42
+    )
+    model.fit(X, y)
 
-        # Persist model + encoders
-        payload = {
-            "model": model,
-            "le_weather": le_weather,
-            "le_season": le_season,
-        }
-        with open(MODEL_PATH, "wb") as f:
-            pickle.dump(payload, f)
+    payload = {
+        "model": model,
+        "le_weather": le_weather,
+        "le_season": le_season,
+    }
+    with open(MODEL_PATH, "wb") as f:
+        pickle.dump(payload, f)
 
-        # Update in-memory cache
-        _cached_model = model
-        _cached_encoders = {"le_weather": le_weather, "le_season": le_season}
+    _cached_model = model
+    _cached_encoders = {"le_weather": le_weather, "le_season": le_season}
 
-        logger.info("Model trained and saved to %s", MODEL_PATH)
-        return {"rows_trained": len(df), "features": list(X.columns)}
-
-    finally:
-        db.close()
+    logger.info("Model trained and saved to %s", MODEL_PATH)
+    return {"rows_trained": len(df), "features": list(X.columns)}
 
 
 def load_model():
